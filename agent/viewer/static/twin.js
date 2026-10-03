@@ -536,7 +536,7 @@ async function boot() {
 
   function setStatus(kind, text) {
     el.state.dataset.state = kind;
-    el.state.querySelector("span:last-child").textContent = text;
+    (el.state.querySelector("strong") || el.state.querySelector("span:last-child")).textContent = text;
   }
 
   function setEmpty(show, title, detail) {
@@ -887,7 +887,10 @@ async function boot() {
         setEmpty(false);
       }
       applyState(state);
-      el.updated.textContent = `Updated ${new Date().toLocaleTimeString([], { hour12: false })}`;
+      const stamp = new Date().toLocaleTimeString([], { hour12: false });
+      const slot = el.updated.querySelector("strong");
+      if (slot) slot.textContent = stamp;
+      else el.updated.textContent = `Updated ${stamp}`;
     } catch (_error) {
       failures += 1;
       if (failures >= OFFLINE_AFTER_FAILURES && online) {

@@ -12,21 +12,28 @@
 <body class="twin-page">
   <a class="skip-link" href="#cameras">Skip to camera feeds</a>
 
-  <header class="topbar">
-    <div class="identity">
-      <div class="mark" aria-hidden="true"><span></span><span></span><span></span></div>
+  <header class="masthead">
+    <div class="brand">
+      <div class="brand-index" aria-hidden="true">SW</div>
       <div>
-        <h1>Site Safety Watch <span class="twin-title-sep">/</span> Live 3D twin</h1>
-        <p>The monitored exit, rebuilt live from the cameras on this GB10.</p>
+        <h1>Site Safety Watch</h1>
+        <p>Live 3D twin · rebuilt from the cameras on this GB10</p>
       </div>
     </div>
-    <div class="system-state" aria-label="Twin status">
-      <a class="state-pill twin-nav" href="/">Console</a>
-      <span class="state-pill" id="twin-state" data-state="checking">
-        <span class="state-dot" aria-hidden="true"></span>
-        <span>Connecting</span>
+
+    <div class="system-board" aria-label="Twin status">
+      <a class="system-cell twin-link" href="/">
+        <span>Command wall</span>
+        <strong>Open console</strong>
+      </a>
+      <span class="system-cell" id="twin-state" data-state="checking">
+        <span>Live twin</span>
+        <strong>Connecting</strong>
       </span>
-      <span class="state-pill timestamp" id="twin-updated">Updated pending</span>
+      <span class="system-cell timestamp" id="twin-updated">
+        <span>Last update</span>
+        <strong>Pending</strong>
+      </span>
     </div>
   </header>
 
@@ -84,7 +91,7 @@
   </main>
 
   <footer class="footer-bar">
-    <strong class="cosmos-credit">100% local on Dell Pro Max GB10</strong>
+    <strong class="local-credit">100% local on Dell Pro Max GB10</strong>
     <section class="metrics-strip" id="twin-stats" aria-label="Twin throughput" hidden>
       <div class="metrics-label">
         <span class="state-dot" aria-hidden="true"></span>

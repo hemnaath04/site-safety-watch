@@ -1,3 +1,23 @@
+/* The twin page follows the command wall design (app.css). Older twin tokens map onto it. */
+.twin-page {
+  --text: var(--paper);
+  --ink: var(--black);
+  --rule: var(--line-soft);
+  --rule-strong: var(--line);
+  --hazard: var(--alert);
+  --hazard-soft: rgba(255, 88, 56, .16);
+  --resolved: var(--clear);
+  --resolved-soft: rgba(91, 214, 192, .14);
+  --posted: var(--amber);
+  --posted-soft: rgba(239, 189, 86, .14);
+  --faint: var(--dim);
+  --surface: var(--panel);
+  --surface-raised: var(--panel-raised);
+  --surface-quiet: var(--shell);
+  --radius: 0px;
+  --focus: var(--safety);
+}
+
 /* Live 3D twin page. Builds on app.css tokens. */
 
 .twin-page { display: flex; flex-direction: column; min-height: 100vh; }
@@ -258,3 +278,30 @@ body[data-mock="1"] .twin-mock-tag { display: block; }
 @media (max-width: 1000px) {
   .twin-scan-credit { left: 14px; right: auto; bottom: auto; top: 104px; }
 }
+
+
+/* Command wall controls: square, condensed, safety-yellow for the active view. */
+.twin-page .twin-toolbar { gap: 0; border: 1px solid var(--line-soft); background: rgba(9, 11, 12, .9); }
+.twin-page .twin-toolbar button {
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 0;
+  border-right: 1px solid var(--line-soft);
+  border-radius: 0;
+  color: var(--muted);
+  background: transparent;
+  font-family: var(--font);
+  font-size: .8rem;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.twin-page .twin-toolbar button:hover { color: var(--paper); background: var(--panel-raised); }
+.twin-page .twin-toolbar button[aria-pressed="true"] { color: var(--black); background: var(--safety); border-color: var(--line-soft); }
+.twin-page .twin-camera-views { display: contents; }
+.twin-page .twin-toolbar-sep { margin: 0; background: var(--line); }
+.twin-page .system-cell[data-state="mock"] strong { color: var(--amber); }
+.twin-page .twin-banner { border-radius: 0; background: var(--alert); color: var(--black); }
+.twin-page .twin-banner span, .twin-page .twin-banner strong { color: var(--black); }
+.twin-page .hud-door strong { border-radius: 0; }
+.twin-page .twin-hud, .twin-page .twin-scan-credit { border-radius: 0; }
