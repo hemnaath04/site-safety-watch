@@ -213,3 +213,16 @@ Create the data, measure the system honestly, and produce the submission.
 - 15:30 hard fallback deadline (text commands instead of buttons; event ID instead of image).
 - 15:30 to 16:15 record the full core demo. Feature freeze 17:00. Submit by 18:00. Slides by
   19:00. Before returning the box at 19:00: `sudo rm /etc/sudoers.d/90-hackathon`.
+
+---
+
+## 6. Changes after the lock (captain, 12:20 to 13:15)
+
+| Person | New work | Where |
+|---|---|---|
+| Hemnaath | Box ops for everything; Cosmos-Reason2-2B server on port 8001; 3D scene service running on the box; console (`agent/viewer/`) with Codex | `agent/`, the box |
+| Mithuna | Accuracy switches `SSW_ENHANCE`, `SSW_LOCATE`, `SSW_VOTE`, `SSW_VERIFIER_URL`; `zones.json` with auto-calibrated exit zones; nullable `box` column on events (she edits section 0 in her PR); per-frame log `data/decisions.jsonl` | `watcher/` |
+| Rahul | CCTV-angle, dim and degraded 360p clips with `quality` in `labels.csv`; `story/eval.py` comparing baseline, enhance, locate, vote, all, all+cosmos; "Built on NVIDIA Cosmos" on slides and README | `story/` |
+
+Drop deadlines: the 3D view and the Cosmos verifier are cut at 16:00 if they are not reliable,
+so the 15:30 to 16:15 recording uses whatever is solid.

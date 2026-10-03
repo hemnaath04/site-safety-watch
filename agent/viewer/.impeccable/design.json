@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-03T12:52:00-04:00",
+  "title": "Design System: Site Safety Watch Console",
+  "extensions": {
+    "colorMeta": {
+      "hazard": {"role": "primary", "displayName": "Safety Orange", "canonical": "#ff6a32", "tonalRamp": ["#35150b", "#5f2411", "#8c3518", "#bd461f", "#ef592a", "#ff7d50", "#ffb199", "#ffe2d6"]},
+      "resolved": {"role": "secondary", "displayName": "Resolved Teal", "canonical": "#57d6b1", "tonalRamp": ["#0b2720", "#123e34", "#195848", "#22735f", "#2f9178", "#57b99e", "#91d8c5", "#d0f2e8"]},
+      "canvas": {"role": "neutral", "displayName": "Carbon Canvas", "canonical": "#080b0f", "tonalRamp": ["#080b0f", "#10161c", "#27313c", "#3b4856", "#5d6b79", "#8995a1", "#c1c9d0", "#f3f0e9"]}
+    },
+    "typographyMeta": {
+      "display": {"displayName": "Hazard Stamp", "purpose": "The active hazard and zone."},
+      "body": {"displayName": "Evidence Copy", "purpose": "Observations, rules and fixes."},
+      "label": {"displayName": "Docket Label", "purpose": "Evidence sections and operational metadata."}
+    },
+    "shadows": [
+      {"name": "hazard-lift", "value": "0 14px 34px rgba(0, 0, 0, 0.42)", "purpose": "Lifts the active hazard stamp over camera evidence."}
+    ],
+    "motion": [
+      {"name": "evidence-enter", "value": "520ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Reveals a newly observed event once."}
+    ],
+    "breakpoints": [
+      {"name": "stack", "value": "1100px"},
+      {"name": "compact", "value": "700px"}
+    ]
+  },
+  "components": [
+    {
+      "name": "Hazard Stamp",
+      "kind": "custom",
+      "refersTo": "hazard-stamp",
+      "description": "The one urgent overlay on camera evidence.",
+      "html": "<div class=\"ds-hazard-stamp\"><span>BLOCKED EXIT</span><strong>EXIT B</strong></div>",
+      "css": ".ds-hazard-stamp { display:inline-block; padding:13px 16px 12px; color:#140904; background:#ff6a32; border-radius:7px; box-shadow:0 14px 34px rgba(0,0,0,.42); font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif; } .ds-hazard-stamp span { display:block; font-size:2rem; font-weight:900; letter-spacing:-.035em; } .ds-hazard-stamp strong { display:block; margin-top:4px; font-size:.75rem; letter-spacing:.07em; }"
+    },
+    {
+      "name": "Approved Status",
+      "kind": "chip",
+      "refersTo": "status-chip",
+      "description": "A text-first resolved state marker.",
+      "html": "<span class=\"ds-approved\">APPROVED</span>",
+      "css": ".ds-approved { display:inline-flex; padding:3px 8px; border:1px solid #28735f; border-radius:5px; color:#c4ffed; background:#12362f; font:800 .64rem ui-sans-serif,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif; letter-spacing:.03em; } .ds-approved:focus-visible { outline:3px solid #9dc6ff; outline-offset:3px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Evidence Docket",
+    "overview": "The console treats each detection as a record with evidence, time, status and human custody. Matte carbon surfaces reduce glare while a single safety orange mark pulls the active hazard forward.",
+    "keyCharacteristics": ["Evidence occupies the most space.", "Status is written as text and reinforced with color.", "Fine rules create chain-of-custody sections.", "New data moves once; unchanged data remains still."],
+    "rules": [
+      {"name": "The Earned Color Rule", "body": "Orange, amber and teal appear only when a real event state earns them.", "section": "colors"},
+      {"name": "The Five-Second Rule", "body": "Product name, active hazard, zone and event status remain readable before any supporting copy.", "section": "typography"},
+      {"name": "The Flat Record Rule", "body": "Evidence rows and detail fields use rules, never generic card shadows.", "section": "elevation"}
+    ],
+    "dos": ["Do make the newest unresolved evidence immediately visible.", "Do show honest loading, empty, unavailable and offline states.", "Do use tabular figures for time, confidence and measured values.", "Do preserve the camera, ledger and selected record at recording breakpoints."],
+    "donts": ["Don't invent metrics, status or evidence.", "Don't add decorative gradients, glows or stock imagery.", "Don't turn the console into a grid of equal metric cards.", "Don't animate unchanged polling results."]
+  }
+}
