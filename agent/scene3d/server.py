@@ -43,6 +43,10 @@ class DepthModel:
 
     def __init__(self, model_dir: str):
         import torch
+        # On the GB10 (sm_121) this torch build's cuDNN has no engine for these fp16 convs
+        # ("unable to find an engine"); the native CUDA path works: 13.6 ms per 518x784 frame
+        # in fp16 measured on the box.
+        torch.backends.cudnn.enabled = False
         from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 
         self.torch = torch
