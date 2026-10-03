@@ -31,7 +31,7 @@ class RealVision:
         self.model = model or config.MODEL
         self.timeout = timeout or config.VISION_TIMEOUT_SEC
 
-    def classify(self, jpeg_bytes: bytes, zone: str) -> dict:
+    def classify(self, jpeg_bytes: bytes, zone: str, prompt: str | None = None) -> dict:
         b64 = base64.b64encode(jpeg_bytes).decode("ascii")
         payload = {
             "model": self.model,
@@ -39,7 +39,7 @@ class RealVision:
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": rules.VISION_PROMPT},
+                        {"type": "text", "text": prompt or rules.VISION_PROMPT},
                         {"type": "image_url",
                          "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
                     ],
@@ -75,7 +75,7 @@ class FakeVision:
         self.confidence = confidence
         self._i = 0
 
-    def classify(self, jpeg_bytes, zone: str) -> dict:
+    def classify(self, jpeg_bytes, zone: str, prompt: str | None = None) -> dict:
         if self.script is not None:
             hazard = self.script[min(self._i, len(self.script) - 1)]
             self._i += 1

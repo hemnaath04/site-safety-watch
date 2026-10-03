@@ -29,6 +29,14 @@ DEDUP_WINDOW_MIN = float(os.environ.get("SSW_DEDUP_MIN", "5"))
 # Vision call timeout and retry (malformed JSON retries once, then we skip).
 VISION_TIMEOUT_SEC = float(os.environ.get("SSW_VISION_TIMEOUT", "30"))
 
+# Motion gate: mean absolute pixel difference (0 to 255) over a small grayscale frame
+# at or above which the scene counts as changed. Below it we skip the vision call.
+MOTION_THRESHOLD = float(os.environ.get("SSW_MOTION_THRESHOLD", "3.0"))
+
+# Face blur on the saved evidence frame. On by default, because the posted frame must not
+# show a face (a hard team rule). It is a no-op when no face is detected.
+BLUR_FACES = os.environ.get("SSW_BLUR", "1") not in ("0", "false", "False", "")
+
 
 def ensure_dirs() -> None:
     FRAMES_DIR.mkdir(parents=True, exist_ok=True)
