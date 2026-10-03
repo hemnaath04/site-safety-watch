@@ -317,5 +317,5 @@ body[data-mock="1"] .twin-mock-tag { display: block; }
 .twin-embed .twin-stage { min-height: 0; border: 0; }
 .twin-embed .twin-toolbar { top: 8px; left: 8px; max-width: calc(100% - 16px); }
 .twin-embed .twin-toolbar button { min-height: 26px; padding: 4px 8px; font-size: .62rem; }
-.twin-embed .twin-hud { transform: scale(.72); transform-origin: bottom left; }
+.twin-embed .twin-hud { display: none; }
 .twin-embed .twin-banner { transform: scale(.8); transform-origin: top right; }
