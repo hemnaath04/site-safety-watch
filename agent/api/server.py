@@ -5,18 +5,27 @@ SSW_API_PORT (8100).
 """
 
 import json
+import math
 import os
 import re
 import shlex
 import subprocess
 import sys
+import threading
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import stats  # noqa: E402
 from alert import build_alert  # noqa: E402
+
+MAX_HOURS = 24 * 31
+MAX_AFTER_MIN = 7 * 24 * 60
+_escalated: set[int] = set()
+_escalated_lock = threading.Lock()
 
 STATUSES = ("new", "posted", "approved", "false_alarm")
 DISPOSITIONS = ("approved", "false_alarm")
@@ -61,6 +70,38 @@ def run_ssw(*args: str):
             raise CliError(404, "not found")
         raise CliError(502, "cli error")
     return data
+
+
+def events_for(statuses) -> list[dict]:
+    out = []
+    for status in statuses:
+        rows = run_ssw("events", "--status", status)
+        if not isinstance(rows, list):
+            raise CliError(502, "cli returned no event list")
+        out.extend(r for r in rows if isinstance(r, dict))
+    return out
+
+
+def number_param(query: dict, name: str, default: float, low: float, high: float):
+    """Parse a numeric query param in [low, high]. Returns None when invalid."""
+    raw = query.get(name, [None])[0]
+    if raw is None or raw == "":
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return None
+    if not math.isfinite(value) or not low <= value <= high:
+        return None
+    return value
+
+
+def claim_escalations(events: list[dict]) -> list[dict]:
+    """Keep only events not escalated before by this process, and remember them."""
+    with _escalated_lock:
+        fresh = [ev for ev in events if int(ev["id"]) not in _escalated]
+        _escalated.update(int(ev["id"]) for ev in fresh)
+    return fresh
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -122,6 +163,27 @@ class Handler(BaseHTTPRequestHandler):
             data = run_ssw("pending")
             text = data if isinstance(data, str) else json.dumps(data)
             return 200, {"text": text or "NO_REPLY"}
+
+        if method == "GET" and parts in (["stats"], ["digest"]):
+            hours = number_param(query, "hours", 24, 0.01, MAX_HOURS)
+            if hours is None:
+                return 400, {"error": "bad hours"}
+            start, end = stats.window(datetime.now(timezone.utc), hours)
+            result = stats.compute_stats(events_for(STATUSES), start, end)
+            if parts == ["stats"]:
+                return 200, result
+            return 200, {"text": stats.digest_text(result)}
+
+        if method == "GET" and parts == ["escalations"]:
+            after_min = number_param(query, "after_min", 10, 0, MAX_AFTER_MIN)
+            if after_min is None:
+                return 400, {"error": "bad after_min"}
+            now = datetime.now(timezone.utc)
+            due = claim_escalations(stats.escalations(events_for(["posted"]), now, after_min))
+            if not due:
+                return 200, {"text": "NO_REPLY"}
+            lines = [stats.escalation_text(ev, stats.minutes_waiting(ev, now)) for ev in due]
+            return 200, {"text": "\n".join(lines), "event_ids": [int(ev["id"]) for ev in due]}
 
         if method == "GET" and parts == ["events"]:
             status = query.get("status", ["new"])[0]
