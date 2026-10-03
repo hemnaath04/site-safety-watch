@@ -181,6 +181,8 @@ class ViewerTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(content_type, "text/html")
         self.assertIn(b"Site Safety Watch", body)
+        self.assertIn(b"100% local on Dell Pro Max GB10", body)
+        self.assertNotIn(b"Built on NVIDIA Cosmos", body)
         self.assertEqual(self.request("/app.css")[:2], (200, "text/css"))
         self.assertEqual(self.request("/app.js")[:2], (200, "text/javascript"))
 
