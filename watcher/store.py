@@ -25,21 +25,36 @@ CREATE TABLE IF NOT EXISTS events (
   status TEXT,
   disposition_by TEXT,
   disposition_ts TEXT,
-  box TEXT
+  box TEXT,
+  resolved_ts TEXT,
+  resolved_frame_path TEXT,
+  time_to_clear_sec REAL,
+  resolved_announced INTEGER DEFAULT 0
 );
 """
 
 _COLUMNS = [
     "id", "ts", "clip", "hazard", "zone", "confidence", "explanation",
     "frame_path", "dedup_key", "status", "disposition_by", "disposition_ts", "box",
+    "resolved_ts", "resolved_frame_path", "time_to_clear_sec", "resolved_announced",
 ]
+
+# Columns added after the first schema; each is nullable so older databases migrate safely.
+_ADDED_COLUMNS = {
+    "box": "TEXT",
+    "resolved_ts": "TEXT",
+    "resolved_frame_path": "TEXT",
+    "time_to_clear_sec": "REAL",
+    "resolved_announced": "INTEGER DEFAULT 0",
+}
 
 
 def _migrate(conn) -> None:
-    """Add the nullable box column to an older db that predates it."""
+    """Add any newer columns to an older db that predates them."""
     cols = [r[1] for r in conn.execute("PRAGMA table_info(events)")]
-    if "box" not in cols:
-        conn.execute("ALTER TABLE events ADD COLUMN box TEXT")
+    for name, decl in _ADDED_COLUMNS.items():
+        if name not in cols:
+            conn.execute(f"ALTER TABLE events ADD COLUMN {name} {decl}")
 
 
 def now_iso() -> str:
@@ -109,6 +124,43 @@ def dispose(conn, event_id, status, by) -> dict | None:
         "UPDATE events SET status = ?, disposition_by = ?, disposition_ts = ? WHERE id = ?",
         (status, by, now_iso(), event_id),
     )
+    conn.commit()
+    return get_event(conn, event_id)
+
+
+ACTIVE_STATUSES = ("new", "posted", "approved")
+
+
+def active_events(conn, zone) -> list[dict]:
+    """Open hazard events in a zone that could still be resolved."""
+    q = ("SELECT * FROM events WHERE zone = ? AND status IN "
+         "('new','posted','approved') ORDER BY id")
+    return [_row_to_dict(r) for r in conn.execute(q, (zone,)).fetchall()]
+
+
+def resolve_event(conn, event_id, *, resolved_ts, resolved_frame_path,
+                  time_to_clear_sec) -> dict | None:
+    """Mark an event resolved with the clear time, a resolution frame and time to clear."""
+    conn.execute(
+        "UPDATE events SET status = 'resolved', resolved_ts = ?, resolved_frame_path = ?, "
+        "time_to_clear_sec = ? WHERE id = ?",
+        (resolved_ts, resolved_frame_path, time_to_clear_sec, event_id),
+    )
+    conn.commit()
+    return get_event(conn, event_id)
+
+
+def pending_resolved(conn) -> list[dict]:
+    """Resolved events the agent has not announced yet."""
+    rows = conn.execute(
+        "SELECT * FROM events WHERE status = 'resolved' AND "
+        "COALESCE(resolved_announced, 0) = 0 ORDER BY id"
+    ).fetchall()
+    return [_row_to_dict(r) for r in rows]
+
+
+def mark_resolved_announced(conn, event_id) -> dict | None:
+    conn.execute("UPDATE events SET resolved_announced = 1 WHERE id = ?", (event_id,))
     conn.commit()
     return get_event(conn, event_id)
 

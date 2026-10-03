@@ -56,6 +56,9 @@ def to_event(raw: dict, zone: str) -> dict:
         "confidence": conf,
         "explanation": raw.get("explanation", "") or "",
         "box": raw.get("box") if hazard == "blocked_exit" else None,
+        # exit_visible is kept so auto-resolution can tell "exit visible and clear" apart from
+        # "no exit in frame" (we only resolve when the exit is visible and not blocked).
+        "exit_visible": exit_visible,
     }
 
 
@@ -137,7 +140,7 @@ class FakeVision:
             explanation = "the exit route is clear"
             conf = 0.95
         return {"hazard": hazard, "zone": zone, "confidence": conf,
-                "explanation": explanation, "box": self.box}
+                "explanation": explanation, "box": self.box, "exit_visible": True}
 
 
 def get_vision(fake: bool):

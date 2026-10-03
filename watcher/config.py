@@ -56,6 +56,12 @@ ZONES_FILE = Path(os.environ.get("SSW_ZONES", REPO_ROOT / "watcher" / "zones.jso
 # Per-frame decision log for debugging and the eval.
 DECISIONS_LOG = Path(os.environ.get("SSW_DECISIONS", DATA_DIR / "decisions.jsonl"))
 
+# Auto-resolution: after this many clear checks in a row in a zone, open events there are
+# marked resolved with the time and a frame. On by default (it only closes events, it never
+# blocks detection); disable with --no-auto-resolve or SSW_AUTO_RESOLVE=0.
+AUTO_RESOLVE = os.environ.get("SSW_AUTO_RESOLVE", "1") not in ("0", "false", "False", "")
+CLEARS_TO_RESOLVE = int(os.environ.get("SSW_CLEARS_TO_RESOLVE", "2"))
+
 # Local timezone for stored timestamps. Inside the vLLM container there is no system TZ, so
 # astimezone() falls back to UTC; use an explicit zone instead. SSW_TZ wins, then TZ, then
 # a sensible venue default.
