@@ -2,11 +2,11 @@
 // Site Safety Watch CLI for the OpenClaw agent. Node 22 built-ins only.
 // The sandbox proxy makes Node print an UNDICI experimental warning on stderr. Scheduled command
 // jobs post stderr to Slack instead of treating NO_REPLY as silence, so drop that one warning.
-const emitWarning = process.emitWarning;
-process.emitWarning = (w, ...rest) => {
-  const code = typeof rest[0] === "object" && rest[0] ? rest[0].code : rest[1];
-  if (code === "UNDICI-EHPA" || /EnvHttpProxyAgent/.test(String(w))) return;
-  return emitWarning.call(process, w, ...rest);
+const writeErr = process.stderr.write.bind(process.stderr);
+process.stderr.write = (chunk, ...rest) => {
+  const text = typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
+  if (/UNDICI-EHPA|--trace-warnings/.test(text)) return true;
+  return writeErr(chunk, ...rest);
 };
 
 import { readFileSync } from "node:fs";
