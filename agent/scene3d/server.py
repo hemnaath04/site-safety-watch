@@ -170,6 +170,7 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "scene3d/1"
     model: DepthModel = None
     live: LiveClip = None
+    live_ema = None  # time-smoothed depth for /scene/live, so the cloud does not shimmer
 
     def log_message(self, fmt, *args):
         sys.stderr.write(f"{self.log_date_time_string()} {fmt % args}\n")
@@ -210,8 +211,13 @@ class Handler(BaseHTTPRequestHandler):
             sys.stderr.write(f"internal error: {exc!r}\n")
             self._json(500, {"error": "internal error"})
 
-    def _render(self, rgb, box, meta: dict, t0: float) -> bytes:
+    def _render(self, rgb, box, meta: dict, t0: float, smooth: bool = False) -> bytes:
         rel_depth, depth_ms = self.model(rgb)
+        if smooth:
+            prev = Handler.live_ema
+            if prev is not None and prev.shape == rel_depth.shape:
+                rel_depth = 0.7 * prev + 0.3 * rel_depth
+            Handler.live_ema = rel_depth
         xyz, colors, flag = geometry.backproject(rgb, rel_depth, hfov_deg=HFOV_DEG,
                                                  stride=STRIDE, box=box)
         h, w = rgb.shape[:2]
@@ -250,7 +256,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.live is None:
             raise HttpError(404, "SSW_DEMO_CLIP is not set")
         rgb, t_sec = self.live.read()
-        self._binary(self._render(rgb, None, {"t_sec": t_sec}, t0))
+        self._binary(self._render(rgb, None, {"t_sec": t_sec, "smoothed": True}, t0, smooth=True))
 
 
 def main():
