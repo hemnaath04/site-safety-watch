@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Twin calibration</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 16px; color: #1b1f24; background: #f6f7f9; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p { margin: 4px 0 12px; color: #4a5260; }
+  .wrap { position: relative; display: inline-block; border: 1px solid #c9ced6; background: #000; }
+  #frame { display: block; max-width: min(1100px, 95vw); height: auto; cursor: crosshair; }
+  #overlay { position: absolute; inset: 0; pointer-events: none; }
+  table { border-collapse: collapse; margin: 12px 0; }
+  th, td { padding: 4px 8px; border-bottom: 1px solid #dde1e6; text-align: left; }
+  input { width: 80px; font: inherit; padding: 2px 4px; }
+  button { font: inherit; padding: 6px 14px; margin-right: 8px; cursor: pointer; }
+  #msg { margin-left: 8px; }
+  .err { color: #b3261e; }
+  .ok { color: #1e7b34; }
+</style>
+</head>
+<body>
+<h1>Floor calibration: <span id="cam"></span></h1>
+<p>Click 4 points on the floor in the frame (for example tape marks or tile corners), then type
+each point's position in meters on the room plan. Room size: <span id="room"></span>.</p>
+<div class="wrap">
+  <img id="frame" alt="current camera frame">
+  <canvas id="overlay"></canvas>
+</div>
+<table>
+  <thead><tr><th>#</th><th>pixel u</th><th>pixel v</th><th>x (m)</th><th>y (m)</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+<button id="reset">Clear points</button>
+<button id="reload">New frame</button>
+<button id="save">Save</button>
+<span id="msg"></span>
+
+<script>
+const cam = decodeURIComponent(location.pathname.split("/").filter(Boolean).pop());
+const img = document.getElementById("frame");
+const canvas = document.getElementById("overlay");
+const rows = document.getElementById("rows");
+const msg = document.getElementById("msg");
+const colors = ["#ff4d4d", "#4dd0ff", "#ffd24d", "#7dff7d"];
+let pixels = [];
+let meters = [["", ""], ["", ""], ["", ""], ["", ""]];
+
+document.getElementById("cam").textContent = cam;
+
+function say(text, cls) {
+  msg.textContent = text;
+  msg.className = cls || "";
+}
+
+function renderRows() {
+  rows.innerHTML = "";
+  for (let i = 0; i < 4; i++) {
+    const p = pixels[i];
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      `<td style="color:${colors[i]}">${i + 1}</td>` +
+      `<td>${p ? p[0].toFixed(1) : "-"}</td><td>${p ? p[1].toFixed(1) : "-"}</td>` +
+      `<td><input data-i="${i}" data-k="0" inputmode="decimal" value="${meters[i][0]}"></td>` +
+      `<td><input data-i="${i}" data-k="1" inputmode="decimal" value="${meters[i][1]}"></td>`;
+    rows.appendChild(tr);
+  }
+  rows.querySelectorAll("input").forEach((el) => {
+    el.addEventListener("input", () => { meters[+el.dataset.i][+el.dataset.k] = el.value; });
+  });
+}
+
+function draw() {
+  canvas.width = img.clientWidth;
+  canvas.height = img.clientHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!img.naturalWidth) return;
+  const s = img.clientWidth / img.naturalWidth;
+  ctx.lineWidth = 2;
+  if (pixels.length > 1) {
+    ctx.strokeStyle = "rgba(255,255,255,0.7)";
+    ctx.beginPath();
+    pixels.forEach((p, i) => (i ? ctx.lineTo(p[0] * s, p[1] * s) : ctx.moveTo(p[0] * s, p[1] * s)));
+    if (pixels.length === 4) ctx.closePath();
+    ctx.stroke();
+  }
+  pixels.forEach((p, i) => {
+    ctx.fillStyle = colors[i];
+    ctx.beginPath();
+    ctx.arc(p[0] * s, p[1] * s, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 13px system-ui";
+    ctx.fillText(String(i + 1), p[0] * s + 9, p[1] * s - 7);
+  });
+}
+
+function loadFrame() {
+  img.src = `/twin/camera/${encodeURIComponent(cam)}.jpg?raw=1&t=${Date.now()}`;
+}
+
+img.addEventListener("load", draw);
+window.addEventListener("resize", draw);
+img.addEventListener("click", (e) => {
+  if (pixels.length >= 4) { say("Already 4 points. Clear to start over.", "err"); return; }
+  const r = img.getBoundingClientRect();
+  const s = img.naturalWidth / r.width;
+  pixels.push([(e.clientX - r.left) * s, (e.clientY - r.top) * s]);
+  say("");
+  renderRows();
+  draw();
+});
+img.addEventListener("error", () => say("No frame yet from this camera. Try New frame.", "err"));
+
+document.getElementById("reset").onclick = () => { pixels = []; renderRows(); draw(); say(""); };
+document.getElementById("reload").onclick = loadFrame;
+document.getElementById("save").onclick = async () => {
+  if (pixels.length !== 4) { say("Click exactly 4 floor points first.", "err"); return; }
+  const m = meters.map((row) => row.map((v) => Number(String(v).trim())));
+  if (m.some((row) => row.some((v) => !Number.isFinite(v) || String(v) === ""))) {
+    say("Type x and y in meters for all 4 points.", "err");
+    return;
+  }
+  say("Saving...");
+  try {
+    const res = await fetch(`/twin/calibrate/${encodeURIComponent(cam)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pixels, meters: m }),
+    });
+    const body = await res.json();
+    if (!res.ok) { say(`Not saved: ${body.error || res.status}`, "err"); return; }
+    say("Saved. The config file was updated and a .bak copy kept.", "ok");
+  } catch (err) {
+    say(`Not saved: ${err}`, "err");
+  }
+};
+
+(async () => {
+  try {
+    const res = await fetch(`/twin/calibrate/${encodeURIComponent(cam)}?format=json`);
+    const info = await res.json();
+    if (!res.ok) { say(info.error || "Unknown camera.", "err"); return; }
+    if (info.room) document.getElementById("room").textContent =
+      `${info.room.width_m} m wide, ${info.room.depth_m} m deep`;
+    const fp = info.floor_points;
+    if (fp && fp.pixels && fp.meters && fp.pixels.length === 4) {
+      pixels = fp.pixels.map((p) => [Number(p[0]), Number(p[1])]);
+      meters = fp.meters.map((p) => [String(p[0]), String(p[1])]);
+    }
+  } catch (err) {
+    say(`Could not load calibration: ${err}`, "err");
+  }
+  renderRows();
+  loadFrame();
+})();
+</script>
+</body>
+</html>
