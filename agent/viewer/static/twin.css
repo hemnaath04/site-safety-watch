@@ -305,3 +305,5 @@ body[data-mock="1"] .twin-mock-tag { display: block; }
 .twin-page .twin-banner span, .twin-page .twin-banner strong { color: var(--black); }
 .twin-page .hud-door strong { border-radius: 0; }
 .twin-page .twin-hud, .twin-page .twin-scan-credit { border-radius: 0; }
+/* The model toggle is a switch, not a view: outline it so only the active view is filled. */
+.twin-page #twin-scan-toggle[aria-pressed="true"] { color: var(--safety); background: transparent; box-shadow: inset 0 -2px 0 var(--safety); }
