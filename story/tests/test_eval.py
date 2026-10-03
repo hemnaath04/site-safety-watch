@@ -37,11 +37,13 @@ def test_matrix_counts_fake():
             ["03_clear_exitA.mp4", "none", "", "phone"],
             ["04_clear_exitA.mp4", "none", "", "phone"],
         ])
+        # no-frames drives a single frame, so test settings that decide per frame.
+        # voting-based settings (vote, all) need several frames and are exercised on the box.
         numbers = run_eval(labels_path=labels, out_path=out, clips_dir=str(d),
-                           fake=True, no_frames=True, settings=["baseline", "vote"],
+                           fake=True, no_frames=True, settings=["baseline", "enhance"],
                            repo_root=REPO_ROOT)
-        assert numbers["settings_run"] == ["baseline", "vote"], numbers["settings_run"]
-        for s in ("baseline", "vote"):
+        assert numbers["settings_run"] == ["baseline", "enhance"], numbers["settings_run"]
+        for s in ("baseline", "enhance"):
             ov = numbers["by_setting"][s]["overall"]
             assert ov["sample_size"] == 4, ov
             assert ov["caught"] == 2 and ov["missed"] == 0, ov
