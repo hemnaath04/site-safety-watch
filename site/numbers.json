@@ -37,13 +37,6 @@
       "detail": "OpenShell policy denied node to example.com:443, while the same process reached the local event API",
       "when": "14:17",
       "status": "measured"
-    },
-    {
-      "value": "Pending",
-      "label": "from a cleared exit to the all-clear",
-      "detail": "Measured from the recorded block-then-clear run",
-      "when": "",
-      "status": "pending"
     }
   ]
 }

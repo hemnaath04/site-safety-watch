@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Site Safety Watch</title>
-<meta name="description" content="An always-on safety agent that watches site cameras on one Dell Pro Max with GB10, catches a blocked fire exit, gets a supervisor's approval in Slack and confirms the fix on camera. The video never leaves the box.">
+<meta name="description" content="An always-on safety agent that watches site cameras on one Dell Pro Max with GB10, catches a blocked fire exit, posts it to Slack with the OSHA rule and records a supervisor's decision. The video never leaves the box.">
 <style>
   :root {
     --canvas: #080b0f;
@@ -153,26 +153,25 @@
   <div class="hero">
     <div>
       <span class="label">Site Safety Watch</span>
-      <h1>The camera that confirms the fix.</h1>
+      <h1>The camera that catches the blocked exit.</h1>
       <p class="lead">An always-on safety agent for the cameras a site already has. It spots a blocked fire
-        exit, posts the evidence and the OSHA rule to Slack, waits for a supervisor's approval, then checks
-        the camera again and closes the work order once the exit is clear.
+        exit, posts the hazard, the OSHA rule and a fix to Slack, records the supervisor's approval or false
+        alarm, and escalates when nobody answers.
         <strong>Every model runs on one Dell Pro Max with GB10, and the video never leaves the box.</strong></p>
     </div>
     <figure style="margin:0">
-      <div class="card" role="img" aria-label="Example Slack alert: blocked exit at exit A, citing 29 CFR 1910.37(a)(3), with Approve and False alarm actions, followed by an all-clear line">
+      <div class="card" role="img" aria-label="Example Slack alert: blocked exit at exit A, citing 29 CFR 1910.37(a)(3), with Approve and False alarm actions">
         <div class="card-head"><span class="label">#safety</span><span class="label">Site Safety Watch</span></div>
         <div class="stamp"><small>Hazard</small>Blocked exit</div>
         <dl>
           <dt>Zone</dt><dd>exit_a</dd>
           <dt>Rule</dt><dd>29 CFR 1910.37(a)(3): exit routes must be free and unobstructed</dd>
           <dt>Fix</dt><dd>Move the obstruction out of the exit route and tag the zone</dd>
-          <dt>Evidence</dt><dd>Annotated frame, faces blurred on the box</dd>
+          <dt>Evidence</dt><dd>Annotated frame, faces blurred, kept on the box</dd>
         </dl>
-        <div class="actions"><span class="chip go">Approve fix</span><span class="chip">False alarm</span></div>
-        <div class="resolved-line">Exit clear on camera. Work order closed.</div>
+        <div class="actions"><span class="chip go">Approve</span><span class="chip">False alarm</span></div>
       </div>
-      <figcaption class="caption">Illustration of the alert and the all-clear. The real card carries the evidence frame.</figcaption>
+      <figcaption class="caption">Illustration of the alert. The Slack alert is text; the evidence frame stays on the box.</figcaption>
     </figure>
   </div>
 </header>
@@ -183,9 +182,9 @@
     <h2 id="loop">One incident, start to finish</h2>
     <ol class="loop">
       <li><h3>Watch</h3><p>Samples each camera on the box and checks the frame with a local vision model.</p></li>
-      <li class="alert"><h3>Alert</h3><p>Posts the hazard, zone, cited rule, a fix and an annotated, face-blurred frame to Slack.</p></li>
-      <li><h3>Approve</h3><p>A supervisor approves or flags a false alarm in the channel. Approval opens a work order.</p></li>
-      <li class="done"><h3>Confirm</h3><p>The agent checks the camera again and closes the work order when the exit is clear.</p></li>
+      <li class="alert"><h3>Alert</h3><p>Posts the hazard, zone, cited rule and a fix to Slack. The annotated, face-blurred frame stays on the box.</p></li>
+      <li><h3>Approve</h3><p>A supervisor approves or flags a false alarm in the channel, and the decision is recorded.</p></li>
+      <li class="done"><h3>Escalate</h3><p>An alert with no decision after 10 minutes is raised again, and a daily digest posts at 5 pm.</p></li>
       <li><h3>Record</h3><p>Every event keeps its evidence, decision, owner and timestamps on the box.</p></li>
     </ol>
   </section>
@@ -228,7 +227,7 @@
         <div class="arrow" aria-hidden="true">↓ alert text and blurred frame only</div>
         <div class="outside">
           <span class="label">Leaves the box</span>
-          <div class="node" style="margin-top:8px"><b>Slack #safety</b><span>Alert, approval, all-clear</span></div>
+          <div class="node" style="margin-top:8px"><b>Slack #safety</b><span>Alert, approval, escalation, digest</span></div>
           <p class="blocked-line" style="margin:8px 0 0">Raw video and model calls: never.</p>
         </div>
       </div>
@@ -243,7 +242,7 @@
       and OSHA's 2026 maximum is $16,550 per serious violation
       (<a href="https://www.osha.gov/memos/2026-05-21/2026-annual-adjustments-osha-civil-penalties">OSHA</a>).
       Sites already pay for cameras that nobody watches live. Site Safety Watch turns them into a record
-      of hazards caught, approved and confirmed cleared, with evidence for each one.</p>
+      of hazards caught and decided, with evidence for each one.</p>
   </section>
 
   <section class="shell" aria-labelledby="stack">
