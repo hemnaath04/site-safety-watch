@@ -64,7 +64,8 @@ def _handle(conn, client, jpeg_bytes, clip_name, zone, log):
     return row
 
 
-def run(clip, zone=None, fake=False, no_frames=False, interval=None):
+def run(clip, zone=None, fake=False, no_frames=False, interval=None,
+        stream=False, max_frames=None):
     conn = store.connect()
     client = vision.get_vision(fake)
     zone = zones.resolve_zone(clip, override=zone)
@@ -80,7 +81,8 @@ def run(clip, zone=None, fake=False, no_frames=False, interval=None):
             created.append(row)
     else:
         from .sampler import iter_frames
-        for _sec, jpeg in iter_frames(clip, interval_sec=interval):
+        for _sec, jpeg in iter_frames(clip, interval_sec=interval, stream=stream,
+                                      max_frames=max_frames):
             row = _handle(conn, client, jpeg, clip, zone, log)
             if row:
                 created.append(row)
@@ -97,9 +99,13 @@ def main(argv=None):
     p.add_argument("--no-frames", action="store_true",
                    help="drive from the fake client with no video (logic smoke test)")
     p.add_argument("--interval", type=float, default=None, help="seconds between frames")
+    p.add_argument("--stream", action="store_true",
+                   help="treat the source as a live replay and reconnect on a drop")
+    p.add_argument("--max-frames", type=int, default=None,
+                   help="stop after this many sampled frames (eval or bounded capture)")
     args = p.parse_args(argv)
     run(args.clip, args.zone, fake=args.fake_vision, no_frames=args.no_frames,
-        interval=args.interval)
+        interval=args.interval, stream=args.stream, max_frames=args.max_frames)
 
 
 if __name__ == "__main__":

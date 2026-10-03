@@ -23,6 +23,19 @@ python -m watcher.watcher --clip data/clips/01_blocked_exit.mp4 --zone exit_a --
 Same command without `--fake-vision`. Reads `VLLM_BASE_URL` (default
 `http://127.0.0.1:8000/v1`) and the model `nvidia/Qwen3.6-35B-A3B-NVFP4`.
 
+## File mode (eval) vs stream mode (demo)
+- **File mode** (Rahul's eval): point `--clip` at an mp4. The watcher reads to the end and
+  stops. Use `--max-frames N` to bound a run.
+- **Stream mode** (live demo): Rahul replays a clip as a stream, for example
+  `ffmpeg -re -stream_loop -1 -i clip.mp4 -f mpegts udp://127.0.0.1:5000`. Run the watcher
+  with `--stream` and the same URL as `--clip`; it reconnects if the stream drops and
+  stops cleanly only when the stream is truly gone.
+- Agree the exact replay URL with Rahul; the watcher takes whatever OpenCV can open (a
+  file path, a udp/rtsp/http URL).
+
+Zone is resolved from the clip name (`NN_hazard_zone.mp4`) or `watcher/zones.py`; pass
+`--zone` to override.
+
 ## The ssw CLI (contract 0.5)
 Each command prints JSON only. `ssw pending` prints the bare string `NO_REPLY` when empty.
 ```
