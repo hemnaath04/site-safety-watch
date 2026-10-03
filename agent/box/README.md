@@ -67,3 +67,17 @@ schema (thinking off), ramping the camera count, and samples `nvidia-smi` once a
 The ceiling is about 4.1 checks per second (compute-bound: 640 px frames and 16 concurrent
 sequences did not raise it). A blocked exit is a static hazard, so one check every 6 s per
 camera is enough: about 24 cameras per box.
+
+## No telemetry from the inference containers
+
+vLLM reports usage stats to stats.vllm.ai by default (hardware and config, no prompts). Found on
+the box at 17:22 as open HTTPS connections from `vllm-main` and the unused `cosmos` container.
+`start-vllm.sh` now sets `VLLM_NO_USAGE_STATS=1` and `DO_NOT_TRACK=1`. For the running containers,
+the box blocks the default Docker bridge from the internet (the model files are local):
+
+```bash
+sudo iptables -I DOCKER-USER -i docker0 ! -d 172.16.0.0/12 -j REJECT    # undo: -D instead of -I
+```
+
+After the rule: 0 public connections from either container, vLLM still answers locally. The only
+internet connection left on the box is the agent's Slack socket (wss-primary.slack.com).
