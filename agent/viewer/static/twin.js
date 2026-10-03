@@ -11,7 +11,6 @@ export const WALL_HEIGHT_M = 2.6;
 export const OBSTRUCTION_HEIGHT_M = 1;
 export const EXIT_ZONE_DEPTH_M = 1.2;
 const GRID_OPACITY = 0.7;
-const GRID_OPACITY_SCAN = 0.22;
 const OVERLAY_ORDER = 10;
 
 const finite = (v) => typeof v === "number" && Number.isFinite(v);
@@ -167,9 +166,19 @@ export function normalizeConfig(raw) {
     : [];
   const cameras = Array.isArray(raw.cameras)
     ? raw.cameras.filter((c) => c && isId(c.id) && c.pose && finite(c.pose.x) && finite(c.pose.y) && finite(c.pose.yaw_deg))
-      .map((c) => ({ id: String(c.id), pose: { x: c.pose.x, y: c.pose.y, yaw_deg: c.pose.yaw_deg }, door_id: c.door_id ?? null }))
+      .map((c) => {
+        const pose = { x: c.pose.x, y: c.pose.y, yaw_deg: c.pose.yaw_deg };
+        if (finite(c.pose.z)) pose.z = c.pose.z;
+        if (finite(c.pose.hfov_deg)) pose.hfov_deg = c.pose.hfov_deg;
+        if (Array.isArray(c.pose.look_at) && c.pose.look_at.length >= 2 && c.pose.look_at.slice(0, 3).every(finite)) {
+          pose.look_at = c.pose.look_at.slice(0, 3);
+        }
+        const label = typeof c.label === "string" && c.label.trim() ? c.label.trim() : null;
+        return { id: String(c.id), label, pose, door_id: c.door_id ?? null };
+      })
     : [];
-  return { room: { width_m: room.width_m, depth_m: room.depth_m, walls, doors, mesh: normalizeMesh(room.mesh) }, cameras };
+  const topRotation = finite(room.top_rotation_deg) ? room.top_rotation_deg : 0;
+  return { room: { width_m: room.width_m, depth_m: room.depth_m, walls, doors, top_rotation_deg: topRotation, mesh: normalizeMesh(room.mesh) }, cameras };
 }
 
 export function normalizeState(raw) {
@@ -207,28 +216,78 @@ export function normalizeState(raw) {
   return { t: raw.t ?? null, people, doors, cameras };
 }
 
-// Fixed camera presets in scene coordinates.
-export function viewPose(name, config) {
-  const { width_m: w, depth_m: d } = config.room;
-  const r = Math.max(w, d);
-  const c = { x: w / 2, y: 0, z: -d / 2 };
-  if (name === "top") {
-    return { position: [c.x, r * 1.55, c.z + 0.001], target: [c.x, 0, c.z] };
+export const TOP_HEIGHT_M = 60;
+export const DEFAULT_CAMERA_HEIGHT_M = 2.0;
+export const DEFAULT_CAMERA_HFOV_DEG = 70;
+export const DEFAULT_CLIP_HEIGHT_M = 2.3;
+
+// Top-down orthographic view fitted to the walls. top_rotation_deg turns the room on screen:
+// screen-up is floor +y rotated counterclockwise by that angle.
+export function topView(config, aspect, margin = 1.08) {
+  const room = config.room;
+  const rot = ((room.top_rotation_deg || 0) * Math.PI) / 180;
+  const up = [-Math.sin(rot), Math.cos(rot)];
+  const right = [up[1], -up[0]];
+  const pts = room.walls.length >= 2 ? room.walls : [[0, 0], [room.width_m, 0], [room.width_m, room.depth_m], [0, room.depth_m]];
+  let minU = Infinity; let maxU = -Infinity; let minR = Infinity; let maxR = -Infinity;
+  for (const [x, y] of pts) {
+    const u = x * up[0] + y * up[1];
+    const r = x * right[0] + y * right[1];
+    minU = Math.min(minU, u); maxU = Math.max(maxU, u);
+    minR = Math.min(minR, r); maxR = Math.max(maxR, r);
   }
-  const door = config.room.doors[0];
-  if (name === "door" && door) {
-    const { normal } = doorOutward(door, config.room);
-    const mx = (door.p1[0] + door.p2[0]) / 2;
-    const my = (door.p1[1] + door.p2[1]) / 2;
-    const back = Math.min(5, d * 0.85);
-    const px = mx - normal[0] * back;
-    const py = my - normal[1] * back;
-    return { position: [px, 3.1, -py], target: [mx, 0.7, -my] };
-  }
-  return { position: [c.x + r * 0.62, r * 0.85, c.z - r * 0.95], target: [c.x, 0, c.z + d * 0.08] };
+  const cu = (minU + maxU) / 2;
+  const cr = (minR + maxR) / 2;
+  const cx = cu * up[0] + cr * right[0];
+  const cy = cu * up[1] + cr * right[1];
+  let halfH = ((maxU - minU) / 2) * margin;
+  let halfW = ((maxR - minR) / 2) * margin;
+  const a = aspect > 0 ? aspect : 1;
+  if (halfW / halfH > a) halfH = halfW / a;
+  else halfW = halfH * a;
+  const eps = 0.01;
+  const c3 = floorPointToThree([cx, cy, 0]);
+  return {
+    target: c3,
+    position: floorPointToThree([cx - up[0] * eps, cy - up[1] * eps, TOP_HEIGHT_M]),
+    halfWidth: halfW,
+    halfHeight: halfH,
+    screenUp: floorPointToThree([up[0], up[1], 0]),
+  };
 }
 
-const MESH_DEFAULTS = Object.freeze({ scale: 1, rotation_deg: [0, 0, 0], offset: [0, 0, 0], opacity: 1 });
+// Perspective view through one camera: pose.x, pose.y, pose.z (height, meters), aimed at
+// pose.look_at [x, y, z] in floor meters (else along yaw_deg, 3 m out, 1 m high).
+export function cameraView(cam, aspect) {
+  const pose = cam.pose;
+  const z = finite(pose.z) ? pose.z : DEFAULT_CAMERA_HEIGHT_M;
+  let look = Array.isArray(pose.look_at) && pose.look_at.length >= 2 && pose.look_at.every(finite) ? pose.look_at : null;
+  if (!look) {
+    const yaw = ((pose.yaw_deg || 0) * Math.PI) / 180;
+    look = [pose.x + Math.cos(yaw) * 3, pose.y + Math.sin(yaw) * 3, 1];
+  }
+  const hfov = finite(pose.hfov_deg) && pose.hfov_deg > 1 && pose.hfov_deg < 179 ? pose.hfov_deg : DEFAULT_CAMERA_HFOV_DEG;
+  const a = aspect > 0 ? aspect : 16 / 9;
+  const vfov = (2 * Math.atan(Math.tan((hfov * Math.PI) / 360) / a) * 180) / Math.PI;
+  return {
+    position: floorPointToThree([pose.x, pose.y, z]),
+    target: floorPointToThree([look[0], look[1], finite(look[2]) ? look[2] : 0]),
+    hfovDeg: hfov,
+    vfovDeg: vfov,
+  };
+}
+
+// Keeps scan geometry at or below clip_height_m above the floor (three.js y).
+export function clipPlaneFor(mesh) {
+  const h = mesh && finite(mesh.clip_height_m) && mesh.clip_height_m > 0 ? mesh.clip_height_m : DEFAULT_CLIP_HEIGHT_M;
+  return { normal: [0, -1, 0], constant: h };
+}
+
+export function viewButtons(config) {
+  return [{ view: "top", label: "Top" }, ...config.cameras.map((c) => ({ view: `cam:${c.id}`, label: c.label || c.id }))];
+}
+
+const MESH_DEFAULTS = Object.freeze({ scale: 1, rotation_deg: [0, 0, 0], offset: [0, 0, 0], opacity: 1, clip_height_m: 2.3 });
 
 const isTriple = (v) => Array.isArray(v) && v.length === 3 && v.every(finite);
 
@@ -247,6 +306,7 @@ export function normalizeMesh(raw, urlOverride = null) {
     rotation_deg: isTriple(base.rotation_deg) ? [...base.rotation_deg] : [...MESH_DEFAULTS.rotation_deg],
     offset: isTriple(base.offset) ? [...base.offset] : [...MESH_DEFAULTS.offset],
     opacity,
+    clip_height_m: finite(base.clip_height_m) && base.clip_height_m > 0 ? base.clip_height_m : MESH_DEFAULTS.clip_height_m,
   };
 }
 
@@ -301,7 +361,7 @@ async function boot() {
   const params = new URLSearchParams(window.location.search);
   const mockMode = params.get("mock") === "1";
   const meshOverride = params.get("mesh");
-  const startView = ["isometric", "top", "door"].includes(params.get("view")) ? params.get("view") : "isometric";
+  const requestedView = params.get("view") || "top";
   const source = mockMode ? (await import("./twin-mock.js")).createMockTwin(undefined, Number(params.get("at"))) : liveSource();
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -328,7 +388,9 @@ async function boot() {
     stats: document.querySelector("#twin-stats"),
     statsLabel: document.querySelector("#twin-stats-label"),
     statsList: document.querySelector("#twin-stats-list"),
-    views: [...document.querySelectorAll("[data-view]")],
+    toolbar: document.querySelector(".twin-toolbar"),
+    cameraViews: document.querySelector("#twin-camera-views"),
+    scanCredit: document.querySelector("#twin-scan-credit"),
     scanToggle: document.querySelector("#twin-scan-toggle"),
     scanNote: document.querySelector("#twin-scan-note"),
   };
@@ -339,15 +401,21 @@ async function boot() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setClearColor(new THREE.Color("#07090c"));
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0x07090c, 18, 40);
-  const camera = new THREE.PerspectiveCamera(45, 1, 0.05, 200);
-  camera.position.set(8, 8, 8);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.localClippingEnabled = true;
+  const perspCamera = new THREE.PerspectiveCamera(DEFAULT_CAMERA_HFOV_DEG, 16 / 9, 0.05, 200);
+  const topCamera = new THREE.OrthographicCamera(-5, 5, 5, -5, 0.1, TOP_HEIGHT_M * 2);
+  topCamera.position.set(0, TOP_HEIGHT_M, 0.01);
+  let camera = topCamera;
+  // Exact views must survive controls.update(), so no polar or distance clamps.
   const controls = new OrbitControls(camera, el.canvas);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.12;
-  controls.maxPolarAngle = Math.PI / 2 - 0.02;
-  controls.minDistance = 1.5;
-  controls.maxDistance = 40;
+  controls.enableDamping = false;
+  controls.minPolarAngle = 0;
+  controls.maxPolarAngle = Math.PI;
+  controls.minDistance = 0.05;
+  controls.maxDistance = TOP_HEIGHT_M * 3;
+  let currentView = null;
+  let viewsBuilt = false;
 
   scene.add(new THREE.HemisphereLight(0xdfe8f2, 0x0b0f14, 1.1));
   const sun = new THREE.DirectionalLight(0xffffff, 1.4);
@@ -372,8 +440,9 @@ async function boot() {
     const { clientWidth: w, clientHeight: h } = el.stage;
     if (!w || !h) return;
     renderer.setSize(w, h, false);
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
+    perspCamera.aspect = w / h;
+    perspCamera.updateProjectionMatrix();
+    if (currentView) goToView(currentView);
   };
   new ResizeObserver(resize).observe(el.stage);
   resize();
@@ -387,15 +456,16 @@ async function boot() {
     el.scanNote.textContent = text || "";
   }
 
-  // Scan on: show the mesh, hide the schematic walls and floor, keep a faint grid.
+  // Scan on: show the mesh, hide the schematic walls, floor and grid.
   function setScanMode(on) {
     scan.on = Boolean(on) && scan.status === "ready";
     scanGroup.visible = scan.on;
     if (schematic) {
       schematic.group.visible = !scan.on;
-      schematic.gridMat.opacity = scan.on ? GRID_OPACITY_SCAN : GRID_OPACITY;
+      schematic.grid.visible = !scan.on;
     }
     el.scanToggle.setAttribute("aria-pressed", String(scan.on));
+    el.scanCredit.hidden = !scan.on;
   }
 
   async function loadScan(mesh) {
@@ -412,18 +482,39 @@ async function boot() {
       root.scale.set(...t.scale);
       root.rotation.set(t.rotation.x, t.rotation.y, t.rotation.z, t.rotation.order);
       root.position.set(...t.position);
+      const clip = clipPlaneFor(mesh);
+      const clipPlane = new THREE.Plane(new THREE.Vector3(...clip.normal), clip.constant);
+      const textures = [];
       root.traverse((o) => {
         if (!o.isMesh) return;
         o.renderOrder = 0;
         const mats = Array.isArray(o.material) ? o.material : [o.material];
         for (const m of mats) {
           if (!m) continue;
+          // Keep the scan's own material; only fix color space, fog and the ceiling clip.
+          if (m.map) {
+            m.map.colorSpace = THREE.SRGBColorSpace;
+            m.map.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+            m.map.needsUpdate = true;
+            textures.push(m.map);
+          }
+          m.fog = false;
+          m.clippingPlanes = [clipPlane];
+          m.clipShadows = true;
+          m.needsUpdate = true;
           if (mesh.opacity < 1) {
             m.transparent = true;
             m.opacity = mesh.opacity;
             m.depthWrite = false;
           }
         }
+      });
+      const img = textures[0]?.image;
+      console.info("room scan loaded", {
+        textures: textures.length,
+        size: img ? `${img.width}x${img.height}` : "none",
+        maxTextureSize: renderer.capabilities.maxTextureSize,
+        clipHeightM: clip.constant,
       });
       scanGroup.clear();
       scanGroup.add(root);
@@ -531,7 +622,7 @@ async function boot() {
     const grid = new THREE.LineSegments(gridGeo, gridMat);
     grid.renderOrder = OVERLAY_ORDER;
     roomGroup.add(grid);
-    schematic = { group: schematicGroup, gridMat };
+    schematic = { group: schematicGroup, grid };
 
     const wallMat = new THREE.MeshStandardMaterial({ color: RULE, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide });
     const wallEdge = new THREE.LineBasicMaterial({ color: 0x82909f, transparent: true, opacity: 0.55 });
@@ -583,17 +674,18 @@ async function boot() {
     }
 
     for (const cam of cfg.cameras) {
+      const view = cameraView(cam, 16 / 9);
       const group = new THREE.Group();
-      group.position.set(cam.pose.x, 2.45, -cam.pose.y);
-      group.rotation.y = (cam.pose.yaw_deg * Math.PI) / 180;
+      group.position.set(...view.position);
+      group.lookAt(new THREE.Vector3(...view.target));
       const tilt = new THREE.Group();
-      tilt.rotation.z = -0.35;
+      tilt.rotation.y = -Math.PI / 2;
       group.add(tilt);
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.12, 0.12), new THREE.MeshStandardMaterial({ color: 0xe6edf3 }));
       tilt.add(body);
       const reach = 1.3;
-      const hw = Math.tan((35 * Math.PI) / 180) * reach;
-      const hh = Math.tan((22 * Math.PI) / 180) * reach;
+      const hw = Math.tan((view.hfovDeg * Math.PI) / 360) * reach;
+      const hh = Math.tan((view.vfovDeg * Math.PI) / 360) * reach;
       const o = [0.11, 0, 0];
       const corners = [[reach, hh, hw], [reach, hh, -hw], [reach, -hh, -hw], [reach, -hh, hw]];
       const tri = [];
@@ -607,7 +699,11 @@ async function boot() {
       lineGeo.setAttribute("position", new THREE.Float32BufferAttribute(lines, 3));
       tilt.add(new THREE.LineSegments(lineGeo, new THREE.LineBasicMaterial({ color: 0x9dc6ff, transparent: true, opacity: 0.75 })));
       roomGroup.add(group);
-      cameraViews.set(cam.id, { label: makeLabel(cam.id, "camera"), anchor: new THREE.Vector3(cam.pose.x, 2.75, -cam.pose.y) });
+      cameraViews.set(cam.id, {
+        group,
+        label: makeLabel(cam.label || cam.id, "camera"),
+        anchor: new THREE.Vector3(view.position[0], view.position[1] + 0.3, view.position[2]),
+      });
     }
   }
 
@@ -766,7 +862,8 @@ async function boot() {
       else if (meshOverride) setScanNote("Room scan path is not valid, showing the schematic room.");
       buildCameraList(cfg);
       renderHud(null);
-      goToView(startView, true);
+      buildViewButtons(cfg);
+      goToView(viewButtons(cfg).some((b) => b.view === requestedView) ? requestedView : "top");
       setStatus("checking", "Waiting for live state");
       setEmpty(true, "Waiting for live state.", "The twin service answered. People and doors appear with the first state update.");
       pollState();
@@ -827,25 +924,67 @@ async function boot() {
     setTimeout(pollStats, POLL_STATS_MS);
   }
 
-  let tween = null;
-  function goToView(name, instant = false) {
-    if (!config) return;
-    const pose = viewPose(name, config);
-    for (const b of el.views) b.setAttribute("aria-pressed", String(b.dataset.view === name));
-    const to = { p: new THREE.Vector3(...pose.position), t: new THREE.Vector3(...pose.target) };
-    if (instant || reducedMotion.matches) {
-      camera.position.copy(to.p);
-      controls.target.copy(to.t);
-      controls.update();
-      tween = null;
-      return;
+  function buildViewButtons(cfg) {
+    el.cameraViews.replaceChildren();
+    for (const b of viewButtons(cfg)) {
+      if (b.view === "top") continue;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.view = b.view;
+      button.setAttribute("aria-pressed", "false");
+      button.textContent = b.label;
+      el.cameraViews.append(button);
     }
-    tween = { from: { p: camera.position.clone(), t: controls.target.clone() }, to, start: performance.now(), ms: 550 };
+    viewsBuilt = true;
   }
-  for (const b of el.views) b.addEventListener("click", () => goToView(b.dataset.view));
+
+  function useCamera(next) {
+    if (camera === next) return;
+    camera = next;
+    controls.object = next;
+  }
+
+  // Every call snaps to the exact preset; orbiting afterwards is allowed.
+  function goToView(name) {
+    if (!config || !viewsBuilt) return;
+    const w = el.stage.clientWidth || 16;
+    const h = el.stage.clientHeight || 9;
+    const camId = name.startsWith("cam:") ? name.slice(4) : null;
+    const cam = camId ? config.cameras.find((c) => c.id === camId) : null;
+    if (cam) {
+      const v = cameraView(cam, w / h);
+      useCamera(perspCamera);
+      perspCamera.fov = v.vfovDeg;
+      perspCamera.aspect = w / h;
+      perspCamera.up.set(0, 1, 0);
+      perspCamera.position.set(...v.position);
+      controls.target.set(...v.target);
+      perspCamera.updateProjectionMatrix();
+    } else {
+      name = "top";
+      const v = topView(config, w / h);
+      useCamera(topCamera);
+      topCamera.left = -v.halfWidth;
+      topCamera.right = v.halfWidth;
+      topCamera.top = v.halfHeight;
+      topCamera.bottom = -v.halfHeight;
+      topCamera.zoom = 1;
+      topCamera.up.set(0, 1, 0);
+      topCamera.position.set(...v.position);
+      controls.target.set(...v.target);
+      topCamera.updateProjectionMatrix();
+    }
+    controls.update();
+    currentView = name;
+    for (const [id, v] of cameraViews) v.group.visible = id !== camId;
+    for (const b of el.toolbar.querySelectorAll("[data-view]")) b.setAttribute("aria-pressed", String(b.dataset.view === name));
+  }
+  el.toolbar.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-view]");
+    if (button) goToView(button.dataset.view);
+  });
   controls.addEventListener("start", () => {
-    tween = null;
-    for (const b of el.views) b.setAttribute("aria-pressed", "false");
+    for (const b of el.toolbar.querySelectorAll("[data-view]")) b.setAttribute("aria-pressed", "false");
   });
 
   const projected = new THREE.Vector3();
@@ -865,13 +1004,6 @@ async function boot() {
     const dt = now - lastFrame;
     lastFrame = now;
 
-    if (tween) {
-      const k = Math.min(1, (now - tween.start) / tween.ms);
-      const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-      camera.position.lerpVectors(tween.from.p, tween.to.p, e);
-      controls.target.lerpVectors(tween.from.t, tween.to.t, e);
-      if (k >= 1) tween = null;
-    }
 
     for (const v of people.values()) {
       const pred = predictPosition(v.target, now - v.recvAt);

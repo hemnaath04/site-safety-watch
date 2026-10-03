@@ -66,7 +66,7 @@ body:has(.metrics-strip:not([hidden])) .twin-shell { height: calc(100vh - 149px)
 .twin-label-door { color: #c4ffed; background: var(--resolved-soft); border: 1px solid #28735f; text-transform: uppercase; font-size: .7rem; letter-spacing: .08em; }
 .twin-label-door[data-blocked="true"] { color: #ffd9cb; background: var(--hazard-soft); border-color: var(--hazard); }
 
-.twin-toolbar { position: absolute; top: 14px; left: 14px; display: flex; gap: 6px; z-index: 3; }
+.twin-toolbar { position: absolute; top: 14px; left: 14px; display: flex; flex-wrap: wrap; gap: 6px; max-width: calc(100% - 160px); z-index: 3; }
 
 .twin-toolbar button {
   min-height: 36px;
@@ -82,6 +82,7 @@ body:has(.metrics-strip:not([hidden])) .twin-shell { height: calc(100vh - 149px)
 
 .twin-toolbar button:hover { border-color: var(--muted); }
 .twin-toolbar button:disabled { opacity: .5; cursor: progress; }
+.twin-camera-views { display: contents; }
 .twin-toolbar-sep { width: 1px; margin: 4px 4px; background: var(--rule-strong); }
 .twin-toolbar-sep:has(+ button[hidden]) { display: none; }
 
@@ -236,4 +237,24 @@ body[data-mock="1"] .twin-mock-tag { display: block; }
 @media (max-width: 640px) {
   .twin-banner { left: 14px; right: 14px; transform: none; top: 60px; }
   .twin-hud { flex-direction: column; right: 14px; }
+}
+
+.twin-scan-credit {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 3;
+  max-width: min(60ch, calc(100% - 28px));
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  background: rgba(11, 15, 20, .88);
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 700;
+}
+
+@media (max-width: 1000px) {
+  .twin-scan-credit { left: 14px; right: auto; bottom: auto; top: 104px; }
 }
