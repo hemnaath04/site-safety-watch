@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Site Safety Watch</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <!--
+  THESIS: Treat every detection as an evidence docket, refusing the generic metric-card dashboard.
+  OWN-WORLD: Matte carbon, paper-white type, safety orange for open evidence, and teal for resolved evidence.
+  STORY: A manager sees the camera, follows the event record, and verifies the human disposition.
+  FIRST VIEWPORT: Identity spans the top, evidence dominates left, event ledger holds right, selected record anchors below.
+  FORM: Evidence docket, candidate 6, seed 18af7262.
+  FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+  -->
+  <a class="skip-link" href="#events">Skip to event ledger</a>
+
+  <header class="topbar">
+    <div class="identity">
+      <div class="mark" aria-hidden="true"><span></span><span></span><span></span></div>
+      <div>
+        <h1>Site Safety Watch</h1>
+        <p>Running on Dell Pro Max with GB10. All inference on this box. Raw video never leaves it.</p>
+      </div>
+    </div>
+    <div class="system-state" aria-label="System status">
+      <span class="state-pill" id="api-state" data-state="checking">
+        <span class="state-dot" aria-hidden="true"></span>
+        <span>Event API checking</span>
+      </span>
+      <span class="state-pill timestamp" id="last-update">Last update pending</span>
+    </div>
+  </header>
+
+  <main class="console-shell">
+    <section class="evidence-column" aria-label="Current camera and selected evidence">
+      <section class="camera-panel" aria-labelledby="camera-title">
+        <div class="panel-heading camera-heading">
+          <div>
+            <p class="section-label">Camera evidence</p>
+            <h2 id="camera-title">Exit route</h2>
+          </div>
+          <span class="source-label" id="source-label">Waiting for evidence</span>
+        </div>
+
+        <div class="camera-stage" id="camera-stage">
+          <video id="clip" muted loop playsinline autoplay hidden>
+            <source src="/clip" type="video/mp4">
+          </video>
+          <img id="camera-frame" src="/frame-placeholder.svg" alt="" hidden>
+          <div class="camera-empty" id="camera-empty">
+            <div class="scan-corners" aria-hidden="true"></div>
+            <p>Watching. No hazards yet.</p>
+            <span>Evidence appears here when the local model records an event.</span>
+          </div>
+          <div class="hazard-stamp" id="hazard-stamp" hidden>
+            <span>Blocked exit</span>
+            <strong id="hazard-zone">Zone pending</strong>
+          </div>
+          <div class="camera-caption" id="camera-caption" hidden>Replay of a clip recorded today</div>
+        </div>
+      </section>
+
+      <section class="detail-panel" id="detail" aria-labelledby="detail-title">
+        <div class="panel-heading detail-heading">
+          <div>
+            <p class="section-label">Selected evidence record</p>
+            <h2 id="detail-title">No event selected</h2>
+          </div>
+          <span class="status-chip status-neutral" id="detail-status">Waiting</span>
+        </div>
+
+        <div class="detail-empty" id="detail-empty">Select an event to inspect the evidence and audit trail.</div>
+        <div class="detail-grid" id="detail-grid" hidden>
+          <figure class="detail-frame-wrap">
+            <img id="detail-frame" src="/frame-placeholder.svg" alt="Evidence frame for selected safety event">
+            <figcaption id="detail-frame-caption">Evidence frame</figcaption>
+          </figure>
+
+          <div class="finding">
+            <p class="field-label">What the model saw</p>
+            <p class="finding-text" id="detail-explanation"></p>
+            <dl class="evidence-fields">
+              <div>
+                <dt>Zone</dt>
+                <dd id="detail-zone"></dd>
+              </div>
+              <div>
+                <dt>Confidence</dt>
+                <dd id="detail-confidence"></dd>
+              </div>
+            </dl>
+          </div>
+
+          <div class="rule-block">
+            <p class="field-label">Stored safety rule</p>
+            <p id="detail-rule"></p>
+            <p class="field-label fix-label">Proposed fix</p>
+            <p id="detail-fix"></p>
+          </div>
+
+          <ol class="timeline" id="detail-timeline" aria-label="Event status timeline"></ol>
+        </div>
+      </section>
+    </section>
+
+    <aside class="event-ledger" id="events" aria-labelledby="events-title">
+      <div class="ledger-heading">
+        <div>
+          <p class="section-label">Live event ledger</p>
+          <h2 id="events-title">Safety events</h2>
+        </div>
+        <span class="event-count" id="event-count" aria-live="polite">0 events</span>
+      </div>
+      <div class="ledger-rule" aria-hidden="true"><span></span></div>
+      <div class="feed-state" id="feed-state" role="status">Connecting to the local event record.</div>
+      <div class="event-list" id="event-list"></div>
+    </aside>
+  </main>
+
+  <footer class="metrics-strip" id="metrics" hidden>
+    <div class="metrics-label">
+      <span class="state-dot" aria-hidden="true"></span>
+      <strong>Measured on the GB10</strong>
+    </div>
+    <dl id="metrics-list"></dl>
+  </footer>
+</body>
+</html>
