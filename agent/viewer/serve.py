@@ -43,6 +43,10 @@ def _scene_base() -> str:
     return os.environ.get("SCENE_URL", "http://127.0.0.1:8300").rstrip("/")
 
 
+def _twin_base() -> str:
+    return os.environ.get("TWIN_URL", "http://127.0.0.1:8400").rstrip("/")
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "ssw-viewer/1"
 
@@ -66,6 +70,12 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.query:
                 suffix += "?" + parsed.query
             self._proxy(_scene_base(), suffix, "scene service unavailable")
+        elif path.startswith("/twin/"):
+            if ".." in path.split("/"):
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            target = quote(path, safe="/") + ("?" + parsed.query if parsed.query else "")
+            self._proxy(_twin_base(), target, "twin service unavailable")
         elif path == "/api" or path.startswith("/api/"):
             suffix = path.removeprefix("/api") or "/"
             if parsed.query:
