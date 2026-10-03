@@ -1,0 +1,12 @@
+data/clips/
+data/frames/
+data/*.db
+*.log
+__pycache__/
+.env
+.slack*
+.venv/
+*.mp4
+*.mov
+.DS_Store
+.claude/settings.local.json
