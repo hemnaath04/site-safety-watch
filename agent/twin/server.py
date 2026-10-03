@@ -75,6 +75,23 @@ DOOR_PROMPT = (
 )
 
 
+def approach_zone(door: dict, walls, depth_m: float = 1.2, pad_m: float = 0.2):
+    """Floor polygon in front of an exit door, on the room side: the egress approach that must
+    stay clear. Used to show a blockage without trusting an uncalibrated camera homography."""
+    (x1, y1), (x2, y2) = door["p1"], door["p2"]
+    L = math.hypot(x2 - x1, y2 - y1) or 1.0
+    ux, uy = (x2 - x1) / L, (y2 - y1) / L
+    nx, ny = -uy, ux
+    mx, my = (x1 + x2) / 2, (y1 + y2) / 2
+    if walls and not geometry.point_in_polygon((mx + 0.5 * nx, my + 0.5 * ny), walls):
+        nx, ny = -nx, -ny
+    a = (x1 - pad_m * ux, y1 - pad_m * uy)
+    b = (x2 + pad_m * ux, y2 + pad_m * uy)
+    return [[round(a[0], 3), round(a[1], 3)], [round(b[0], 3), round(b[1], 3)],
+            [round(b[0] + depth_m * nx, 3), round(b[1] + depth_m * ny, 3)],
+            [round(a[0] + depth_m * nx, 3), round(a[1] + depth_m * ny, 3)]]
+
+
 def log(msg: str) -> None:
     sys.stderr.write(f"{time.strftime('%H:%M:%S')} {msg}\n")
 
@@ -337,6 +354,9 @@ class Twin:
         self.people = []
         self.doors = {d["id"]: {"open": None, "blocked": None, "obstruction_floor": None,
                                 "updated": None} for d in self.room.get("doors", [])}
+        self.door_zones = {d["id"]: approach_zone(d, self.walls) for d in self.room.get("doors", [])
+                           if d.get("p1") and d.get("p2")}
+        self.primary = {}
         self.batch_ms = deque(maxlen=600)
         self.detected = deque(maxlen=2000)
         self.door_ms = deque(maxlen=200)
@@ -389,15 +409,30 @@ class Twin:
             return
         results, ms = self.detector.detect(frames)
         now = time.monotonic()
-        dets = []
+        per_cam = {}
         for cam, people in zip(cams, results):
             cam.boxes = people
-            if cam.H is None or not people:
-                continue
-            feet = geometry.project(cam.H, [geometry.feet_point(b) for b, _ in people])
-            for x, y in feet:
-                if math.isfinite(x) and math.isfinite(y) and self._in_room(x, y):
-                    dets.append((float(x), float(y), cam.id))
+            found = []
+            if cam.H is not None and people:
+                feet = geometry.project(cam.H, [geometry.feet_point(b) for b, _ in people])
+                for x, y in feet:
+                    if math.isfinite(x) and math.isfinite(y) and self._in_room(x, y):
+                        found.append((float(x), float(y), cam.id))
+            per_cam[cam.id] = (cam, found)
+        # Angles of one synced take see the same people, and the floor mappings are not
+        # calibrated well enough to fuse them, so each group counts people from one camera:
+        # the one that sees the most, sticky on ties so pins do not jump between cameras.
+        chosen = {}
+        for cid, (cam, found) in per_cam.items():
+            key = cam.sync_group or cid
+            cur = chosen.get(key)
+            if (cur is None or len(found) > len(cur[1])
+                    or (len(found) == len(cur[1]) and self.primary.get(key) == cid)):
+                chosen[key] = (cid, found)
+        dets = []
+        for key, (cid, found) in chosen.items():
+            self.primary[key] = cid
+            dets.extend(found)
         tracks = self.tracker.update(tracker.fuse(dets), now)
         with self.state_lock:
             self.people = tracks
@@ -467,9 +502,8 @@ class Twin:
             px = geometry.scale_box_1000(report["obstruction"], w, h)
             px = [px[0] + ox, px[1] + oy, px[2] + ox, px[3] + oy]  # back to full-frame pixels
             report["obstruction_px"] = px
-            if cam.H is not None:
-                report["obstruction_floor"] = geometry.footprint(
-                    cam.H, px, cam_xy=(cam.pose["x"], cam.pose["y"]))
+        if report["blocked"]:
+            report["obstruction_floor"] = self.door_zones.get(cam.door_id)
         cam.door_report = report
         return report
 
