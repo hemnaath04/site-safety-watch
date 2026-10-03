@@ -65,9 +65,12 @@ CAM_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 DOOR_PROMPT = (
     "This is a CCTV frame of a room with an emergency exit door. Answer about that exit door "
     "only. door_visible: true if the exit door is in view. door_open: true if it is open. "
-    "blocked: true if an object (cart, boxes, pallet, equipment) sits in front of the door or "
-    "in its exit route so people could not get out quickly; a person walking through is not a "
-    "blockage. obstruction: the blocking object's box as [x1, y1, x2, y2] on a 0 to 1000 "
+    "blocked: OSHA 29 CFR 1910.37 says exit routes must be free and unobstructed, so true if any "
+    "movable item (standing table, stand, chair, cart, boxes, pallet, equipment) is placed in "
+    "front of the door or in the floor area people use to reach it, even if someone could squeeze "
+    "past. Permanent fixtures (built-in desks and seating rows, handrails, walls, pillars) and a "
+    "person walking through are not a blockage. obstruction: the blocking object's box as "
+    "[x1, y1, x2, y2] on a 0 to 1000 "
     "scale of the image, or null if not blocked."
 )
 
@@ -114,6 +117,8 @@ class Camera:
                 self.pose[key] = pose[key]
         self.label = cfg.get("label")
         self.door_id = cfg.get("door_id")
+        crop = cfg.get("door_crop")  # optional [x1, y1, x2, y2] source pixels around the exit door
+        self.door_crop = [int(v) for v in crop] if isinstance(crop, (list, tuple)) and len(crop) == 4 else None
         self.sync_group = cfg.get("sync_group") or None
         self.start_offset_s = float(cfg.get("start_offset_s", 0.0))
         if not (math.isfinite(self.start_offset_s) and self.start_offset_s >= 0):
@@ -403,6 +408,14 @@ class Twin:
         frame = self._fresh(cam)
         if frame is None:
             return None
+        ox = oy = 0
+        if cam.door_crop:
+            fh, fw = frame.shape[:2]
+            x1, y1, x2, y2 = cam.door_crop
+            x1, x2 = max(0, min(x1, fw - 1)), max(1, min(x2, fw))
+            y1, y2 = max(0, min(y1, fh - 1)), max(1, min(y2, fh))
+            if x2 > x1 and y2 > y1:
+                frame, ox, oy = frame[y1:y2, x1:x2], x1, y1
         h, w = frame.shape[:2]
         send = frame if w <= 960 else cv2.resize(frame, (960, round(h * 960 / w)))
         ok, jpg = cv2.imencode(".jpg", send, [cv2.IMWRITE_JPEG_QUALITY, 85])
@@ -452,6 +465,7 @@ class Twin:
         report["obstruction_floor"] = None
         if report["blocked"] and report["obstruction"]:
             px = geometry.scale_box_1000(report["obstruction"], w, h)
+            px = [px[0] + ox, px[1] + oy, px[2] + ox, px[3] + oy]  # back to full-frame pixels
             report["obstruction_px"] = px
             if cam.H is not None:
                 report["obstruction_floor"] = geometry.footprint(
