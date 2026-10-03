@@ -200,7 +200,7 @@ class Handler(BaseHTTPRequestHandler):
             end = min(end, size - 1)
             status = HTTPStatus.PARTIAL_CONTENT
         length = max(0, end - start + 1)
-        self._headers(status, "video/mp4", length)
+        self._headers(status, mimetypes.guess_type(clip.name)[0] or "video/mp4", length)
         self.send_header("Accept-Ranges", "bytes")
         if status == HTTPStatus.PARTIAL_CONTENT:
             self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
