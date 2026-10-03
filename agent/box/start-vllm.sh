@@ -10,6 +10,7 @@ IMAGE="${IMAGE:-gb10/vllm-spark:local}"
 
 docker rm -f vllm-main >/dev/null 2>&1 || true
 docker run -d --name vllm-main --restart unless-stopped --gpus all --ipc host \
+  -e VLLM_NO_USAGE_STATS=1 -e DO_NOT_TRACK=1 \
   --ulimit memlock=-1 --ulimit stack=67108864 \
   -p 127.0.0.1:8000:8000 -p 172.17.0.1:8000:8000 \
   -v "$MODELS":/models:ro \
