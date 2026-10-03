@@ -14,7 +14,7 @@ node <skill dir>/ssw.mjs <command>
 ```
 
 `<skill dir>` is the folder this file is in. Every command prints JSON, except `pending`,
-which prints plain text. If a command exits non-zero, say in one line that the safety tool
+`post-new`, `digest` and `escalate`, which print plain text. If a command exits non-zero, say in one line that the safety tool
 failed and quote its error line. Do not guess the answer.
 
 ## 1. Check for hazards
@@ -52,6 +52,29 @@ When a person writes `approve <id>` or `false-alarm <id>`:
 
 When someone asks about an event, run `node <skill dir>/ssw.mjs event <id>` and answer from
 that JSON only. If a field is not in the JSON, say you do not have it.
+
+## 5. Answer questions about safety history
+
+For counts, times and trends ("how many blocked exits today?", "what was approved this
+week?", "how fast do we respond?"):
+
+1. Run `node <skill dir>/ssw.mjs stats --hours N`. Use `--hours 24` for "today" and
+   `--hours 168` for "this week". For another window, use the number of hours the person
+   named.
+2. Answer only from that JSON, in one or two sentences. Quote the numbers exactly as the tool
+   printed them and say the window, for example "in the last 24 hours".
+3. Never estimate, round, add up or extrapolate. If the JSON does not hold the answer, say you
+   do not have that number.
+
+## 6. Scheduled jobs
+
+Two scheduled command jobs post on their own, without you: a daily digest
+(`ssw.mjs digest`) and escalations for alerts nobody has decided on (`ssw.mjs escalate`). Do
+not repeat or comment on their posts.
+
+If a person asks for the summary or the digest, run `node <skill dir>/ssw.mjs digest` (add
+`--hours N` if they name a window) and post its text unchanged. If it prints exactly
+`NO_REPLY`, reply exactly `NO_REPLY`.
 
 ## Hard rules
 
