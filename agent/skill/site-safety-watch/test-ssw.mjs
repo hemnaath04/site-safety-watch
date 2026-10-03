@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 // Run: node --test agent/skill/site-safety-watch/test-ssw.mjs
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
@@ -184,7 +185,8 @@ test("falls back to config.json when SSW_API_URL is unset", async () => {
   const r = await new Promise((resolve) => {
     execFile(process.execPath, [CLI, "event", "1"], { env }, (err, stdout, stderr) => resolve({ code: err ? err.code : 0, stderr }));
   });
-  // config.json points at 127.0.0.1:8100, which nothing serves in this test
+  // config.json points at the deployed API address, which nothing serves in this test
+  const { apiUrl } = JSON.parse(readFileSync(new URL("./config.json", import.meta.url), "utf8"));
   assert.equal(r.code, 1);
-  assert.match(r.stderr, /127\.0\.0\.1:8100/);
+  assert.ok(r.stderr.includes(new URL(apiUrl).host), r.stderr);
 });

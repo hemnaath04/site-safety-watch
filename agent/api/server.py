@@ -53,11 +53,11 @@ def run_ssw(*args: str):
     except json.JSONDecodeError:
         data = stdout
     if proc.returncode != 0:
-        if isinstance(data, dict) and data.get("error") == "not_found":
+        if isinstance(data, dict) and str(data.get("error", "")).replace(" ", "_") == "not_found":
             raise CliError(404, "not found")
         raise CliError(502, f"cli exited {proc.returncode}")
     if isinstance(data, dict) and "error" in data:
-        if data["error"] == "not_found":
+        if str(data["error"]).replace(" ", "_") == "not_found":
             raise CliError(404, "not found")
         raise CliError(502, "cli error")
     return data
