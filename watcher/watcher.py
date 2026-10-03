@@ -20,7 +20,7 @@ from . import blur, config, dedup, motion, rules, store, vision, zones
 from . import enhance as enhance_mod
 from . import locate as locate_mod
 from . import verifier, voting
-from .sampler import utc_now
+from .sampler import now_local
 
 
 def _save_frame(jpeg_bytes, clip_name, when, do_blur=True) -> str:
@@ -71,12 +71,11 @@ def _handle(conn, client, jpeg_bytes, clip_name, zone, log,
     if enhance and jpeg_bytes:
         vision_jpeg = enhance_mod.enhance_jpeg(jpeg_bytes, zone_box)
 
-    prompt = rules.LOCATE_PROMPT if locate else None
     try:
-        event = client.classify(vision_jpeg, zone, prompt=prompt)
+        event = client.classify(vision_jpeg, zone)
     except Exception as exc:  # retry once, then treat as a miss
         try:
-            event = client.classify(vision_jpeg, zone, prompt=prompt)
+            event = client.classify(vision_jpeg, zone)
         except Exception:
             log(f"skip: vision error: {exc}")
             if voter is not None:
@@ -127,7 +126,7 @@ def _handle(conn, client, jpeg_bytes, clip_name, zone, log,
         log(f"filtered: verifier rejected {hazard} in {zone}")
         return None
 
-    when = utc_now()
+    when = now_local()
     if dedup.is_duplicate(conn, hazard, zone, when):
         log(f"dup: {hazard} in {zone} already open")
         return None

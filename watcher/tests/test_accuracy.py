@@ -160,5 +160,40 @@ class TestEnhanceSafe(unittest.TestCase):
         self.assertEqual(out, b"not-an-image")
 
 
+class TestVisionMapping(unittest.TestCase):
+    def test_blocked_exit_maps_from_visible_and_blocked(self):
+        ev = vision.to_event(
+            {"exit_visible": True, "blocked": True, "box": [1, 2, 3, 4],
+             "confidence": 0.9, "explanation": "cart"}, "exit_a")
+        self.assertEqual(ev["hazard"], "blocked_exit")
+        self.assertEqual(ev["zone"], "exit_a")
+        self.assertEqual(ev["box"], [1, 2, 3, 4])
+        self.assertTrue(rules.validate_event(ev))
+
+    def test_visible_but_not_blocked_is_none(self):
+        ev = vision.to_event(
+            {"exit_visible": True, "blocked": False, "box": None,
+             "confidence": 0.9, "explanation": "clear"}, "z")
+        self.assertEqual(ev["hazard"], "none")
+        self.assertIsNone(ev["box"])
+
+    def test_not_visible_is_none(self):
+        ev = vision.to_event(
+            {"exit_visible": False, "blocked": True, "box": [1, 2, 3, 4],
+             "confidence": 0.9, "explanation": "no exit in frame"}, "z")
+        self.assertEqual(ev["hazard"], "none")
+        self.assertIsNone(ev["box"])  # box dropped when not a blocked exit
+
+
+class TestLocalTime(unittest.TestCase):
+    def test_now_iso_is_timezone_aware_local(self):
+        from datetime import datetime
+        s = store.now_iso()
+        dt = datetime.fromisoformat(s)
+        self.assertIsNotNone(dt.tzinfo)
+        # offset matches this machine's local offset
+        self.assertEqual(dt.utcoffset(), datetime.now().astimezone().utcoffset())
+
+
 if __name__ == "__main__":
     unittest.main()

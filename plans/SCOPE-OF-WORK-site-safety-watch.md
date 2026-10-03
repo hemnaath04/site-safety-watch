@@ -29,6 +29,11 @@ Later hazards (`spill`, `trip_cable`) are added to the enum only after Gate 2.
 `box` is optional (post-lock, for LOCATE): the obstruction box `[x, y, width, height]` in
 pixels, or `null`. The watcher accepts events with or without it.
 
+Post-lock, the model is asked for the raw schema `{exit_visible, blocked, box, confidence,
+explanation}`, enforced by vLLM guided decoding at temperature 0 so the reply always parses.
+The vision client maps it to the event above: `blocked_exit` when an exit is both visible
+and blocked, else `none`. Timestamps are stored in local time.
+
 ### 0.2 SQLite schema (`data/ssw.db`, owned by Mithuna, the single source of truth)
 ```sql
 CREATE TABLE events (

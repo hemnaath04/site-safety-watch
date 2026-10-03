@@ -11,7 +11,7 @@ capture_factory and encode.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from . import config
 
@@ -86,5 +86,6 @@ def iter_frames(source, interval_sec=None, width=None, max_frames=None, stream=F
         cap.release()
 
 
-def utc_now():
-    return datetime.now(timezone.utc)
+def now_local():
+    # Timezone-aware local time, consistent with store.now_iso.
+    return datetime.now().astimezone()

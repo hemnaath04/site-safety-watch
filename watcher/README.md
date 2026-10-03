@@ -57,6 +57,12 @@ Tip: `alias ssw="python -m watcher.ssw"` from the repo root.
 Event JSON 0.1, SQLite 0.2, rule table 0.3, vision endpoint 0.4, `ssw` CLI 0.5, all in
 `plans/SCOPE-OF-WORK-site-safety-watch.md`. Build against them exactly.
 
+## Vision output (enforced schema)
+The model is asked for `{exit_visible, blocked, box, confidence, explanation}`, enforced by
+vLLM guided decoding at temperature 0, so the reply always parses (this is what makes the
+second look reliable). `vision.to_event` maps it to the internal event: `blocked_exit` only
+when an exit is both visible and blocked, else `none`. Timestamps are stored in local time.
+
 ## Safety and efficiency features
 - **Face blur (on by default).** The saved evidence frame has any detected face blurred
   before it can be posted. It is a no-op when no face is found. Turn it off only on clips

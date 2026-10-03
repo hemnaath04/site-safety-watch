@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 from . import config
@@ -44,7 +44,8 @@ def _migrate(conn) -> None:
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    # Local time (timezone aware) so the logs and alerts read in the site's clock.
+    return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
 def connect(db_path: Path | None = None) -> sqlite3.Connection:

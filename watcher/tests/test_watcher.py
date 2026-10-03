@@ -14,7 +14,7 @@ os.environ["SSW_DB"] = os.path.join(_TMP, "ssw.db")
 
 from watcher import dedup, rules, store, vision, zones  # noqa: E402
 from watcher import watcher as watcher_mod  # noqa: E402
-from watcher.sampler import utc_now  # noqa: E402
+from watcher.sampler import now_local  # noqa: E402
 
 
 class TestRules(unittest.TestCase):
@@ -95,14 +95,14 @@ class TestDedup(unittest.TestCase):
         self.conn.commit()
 
     def test_duplicate_within_window(self):
-        when = utc_now()
+        when = now_local()
         key = dedup.make_dedup_key("blocked_exit", "exit_a", when, 5)
         store.insert_event(self.conn, clip="c", hazard="blocked_exit", zone="exit_a",
                            confidence=0.9, explanation="x", frame_path="f", dedup_key=key)
         self.assertTrue(dedup.is_duplicate(self.conn, "blocked_exit", "exit_a", when))
 
     def test_not_duplicate_other_zone(self):
-        when = utc_now()
+        when = now_local()
         key = dedup.make_dedup_key("blocked_exit", "exit_a", when, 5)
         store.insert_event(self.conn, clip="c", hazard="blocked_exit", zone="exit_a",
                            confidence=0.9, explanation="x", frame_path="f", dedup_key=key)

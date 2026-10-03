@@ -23,6 +23,27 @@ def _extract_json(text: str) -> dict:
     return json.loads(text[start:end + 1])
 
 
+def to_event(raw: dict, zone: str) -> dict:
+    """Map the raw model schema {exit_visible, blocked, box, confidence, explanation} to
+    the internal event {hazard, zone, confidence, explanation, box}. A blocked exit needs
+    an exit to be visible and blocked; otherwise the hazard is none.
+    """
+    exit_visible = bool(raw.get("exit_visible"))
+    blocked = bool(raw.get("blocked"))
+    hazard = "blocked_exit" if (exit_visible and blocked) else "none"
+    try:
+        conf = float(raw.get("confidence", 0) or 0)
+    except (TypeError, ValueError):
+        conf = 0.0
+    return {
+        "hazard": hazard,
+        "zone": zone,
+        "confidence": conf,
+        "explanation": raw.get("explanation", "") or "",
+        "box": raw.get("box") if hazard == "blocked_exit" else None,
+    }
+
+
 class RealVision:
     """Calls http://127.0.0.1:8000/v1/chat/completions on the box (OpenAI compatible)."""
 
@@ -48,6 +69,13 @@ class RealVision:
             "temperature": 0,
             "max_tokens": 200,
             "chat_template_kwargs": {"enable_thinking": False},
+            # Enforce the JSON schema so the reply is always well formed. response_format is
+            # the OpenAI-compatible form; guided_json is the vLLM-native fallback.
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": "sighting", "schema": rules.VISION_SCHEMA},
+            },
+            "guided_json": rules.VISION_SCHEMA,
         }
         req = urllib.request.Request(
             f"{self.base_url}/chat/completions",
@@ -58,9 +86,7 @@ class RealVision:
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:
             body = json.loads(resp.read().decode("utf-8"))
         content = body["choices"][0]["message"]["content"]
-        event = _extract_json(content)
-        event["zone"] = zone  # zone comes from the clip config, never the model
-        return event
+        return to_event(_extract_json(content), zone)
 
 
 class FakeVision:
