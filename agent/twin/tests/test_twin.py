@@ -219,6 +219,28 @@ class ServerTest(unittest.TestCase):
         self.assertEqual([c["id"] for c in cfg["cameras"]], ["cam1", "cam2"])
         self.assertTrue(all(c["calibrated"] for c in cfg["cameras"]))
 
+    def test_config_passes_view_fields_through(self):
+        cfg = json.loads(self.req("GET", "/twin/config")[2])
+        self.assertEqual(cfg["room"]["top_rotation_deg"], 0)
+        self.assertEqual(cfg["room"]["mesh"], {"clip_height_m": 2.2})
+        cam1 = cfg["cameras"][0]
+        self.assertEqual(cam1["label"], "Phone A, back left")
+        self.assertEqual(cam1["sync_group"], "exit_demo")
+        self.assertEqual(cam1["pose"], {"x": 0.5, "y": 5.5, "yaw_deg": -40.0, "z": 1.6,
+                                        "look_at": [4, 0, 1], "hfov_deg": 70})
+
+    def test_state_reports_sync_groups(self):
+        state = json.loads(self.req("GET", "/twin/state")[2])
+        self.assertIn("exit_demo", state["sync"])
+        group = self.twin.groups["exit_demo"]
+        self.assertEqual(group.offsets, {"cam1": 0.0, "cam2": 3.5})
+        group.register("cam1", 60.0)
+        group.register("cam2", 58.0)
+        sync = json.loads(self.req("GET", "/twin/state")[2])["sync"]["exit_demo"]
+        self.assertEqual(sync["loop_len"], 54.5)
+        self.assertGreaterEqual(sync["t"], 0.0)
+        self.assertLess(sync["t"], 54.5)
+
     def test_detect_once_then_state(self):
         self.twin.detect_once()
         code, _, body = self.req("GET", "/twin/state")

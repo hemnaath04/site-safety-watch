@@ -44,7 +44,10 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import doors  # noqa: E402
 import geometry  # noqa: E402
+import syncclock  # noqa: E402
 import tracker  # noqa: E402
+
+POSE_PASSTHROUGH = ("z", "look_at", "hfov_deg")
 
 REPO_ROOT = Path(os.environ.get("SSW_REPO_ROOT", "/repo")).resolve()
 DETECT_MS = float(os.environ.get("TWIN_DETECT_MS", "100"))
@@ -106,7 +109,16 @@ class Camera:
         pose = cfg.get("pose") or {}
         self.pose = {"x": float(pose.get("x", 0)), "y": float(pose.get("y", 0)),
                      "yaw_deg": float(pose.get("yaw_deg", 0))}
+        for key in POSE_PASSTHROUGH:
+            if pose.get(key) is not None:
+                self.pose[key] = pose[key]
+        self.label = cfg.get("label")
         self.door_id = cfg.get("door_id")
+        self.sync_group = cfg.get("sync_group") or None
+        self.start_offset_s = float(cfg.get("start_offset_s", 0.0))
+        if not (math.isfinite(self.start_offset_s) and self.start_offset_s >= 0):
+            raise ValueError(f"{self.id}: start_offset_s must be >= 0")
+        self.group = None
         self.H = None
         self.set_floor_points(cfg.get("floor_points"))
         self.lock = threading.Lock()
@@ -146,6 +158,8 @@ class Camera:
             return round((time.monotonic() - self.frame_t) * 1000.0, 1)
 
     def read_forever(self):
+        if self.group is not None and self.is_file:
+            return self.read_synced()
         while True:
             cap = cv2.VideoCapture(self.source)
             if not cap.isOpened():
@@ -181,6 +195,61 @@ class Camera:
             if not self.is_file:
                 log(f"{self.id}: stream dropped, reconnecting")
                 time.sleep(1.0)
+
+    def read_synced(self):
+        """Play this camera's file on its group's shared clock: seek on each new loop (and if
+        more than half a second off), read frames in order in between."""
+        group = self.group
+        while True:
+            cap = cv2.VideoCapture(self.source)
+            if not cap.isOpened():
+                log(f"{self.id}: cannot open source, retrying in 2 s")
+                time.sleep(2.0)
+                continue
+            fps = cap.get(cv2.CAP_PROP_FPS) or 0.0
+            if not 1.0 <= fps <= 120.0:
+                fps = 25.0
+            frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            if frames <= 0:
+                log(f"{self.id}: no frame count, cannot sync; retrying in 5 s")
+                cap.release()
+                time.sleep(5.0)
+                continue
+            group.register(self.id, frames / fps)
+            if not group.wait_ready() or self.id not in group.members:
+                log(f"{self.id}: left out of sync group {group.name} "
+                    f"(offset {self.start_offset_s} s past the end of the clip?)")
+                cap.release()
+                return
+            log(f"{self.id}: synced in group {group.name}, offset {self.start_offset_s} s, "
+                f"loop {group.loop_len:.2f} s, {fps:.2f} fps")
+            next_idx = 0
+            cycle = None
+            while True:
+                t, cyc = group.now()
+                action, arg = syncclock.plan_step(
+                    next_idx, syncclock.file_position(self.start_offset_s, t), fps, cyc != cycle)
+                cycle = cyc
+                if action == "seek":
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, arg)
+                    next_idx = arg
+                elif action == "sleep":
+                    time.sleep(min(arg, 0.5))
+                    continue
+                elif action == "grab":
+                    for _ in range(arg):
+                        if not cap.grab():
+                            break
+                        next_idx += 1
+                ok, frame = cap.read()
+                if not ok:
+                    # past the last decodable frame: wait for the loop to wrap, then seek
+                    t_now, _ = group.now()
+                    time.sleep(max(0.01, min(0.5, group.loop_len - t_now)))
+                    cycle = None
+                    continue
+                next_idx += 1
+                self.publish(frame)
 
 
 class Detector:
@@ -248,6 +317,15 @@ class Twin:
         self.room = cfg["room"]
         self.walls = [tuple(map(float, p)) for p in self.room.get("walls", [])]
         self.cameras = {c["id"]: Camera(c) for c in cfg["cameras"]}
+        self.groups = {}
+        for name in sorted({c.sync_group for c in self.cameras.values() if c.sync_group}):
+            members = [c for c in self.cameras.values() if c.sync_group == name and c.is_file]
+            if not members:
+                continue
+            group = syncclock.SyncGroup(name, {c.id: c.start_offset_s for c in members})
+            for c in members:
+                c.group = group
+            self.groups[name] = group
         self.detector = detector
         self.tracker = tracker.Tracker()
         self.state_lock = threading.Lock()
@@ -399,8 +477,9 @@ class Twin:
     def config_view(self):
         return {
             "room": self.room,
-            "cameras": [{"id": c.id, "pose": c.pose, "door_id": c.door_id,
-                         "calibrated": c.H is not None} for c in self.cameras.values()],
+            "cameras": [{"id": c.id, "label": c.label, "pose": c.pose, "door_id": c.door_id,
+                         "sync_group": c.sync_group, "calibrated": c.H is not None}
+                        for c in self.cameras.values()],
         }
 
     def state_view(self):
@@ -415,6 +494,7 @@ class Twin:
                        "updated": v.get("updated")} for k, v in door_state.items()],
             "cameras": [{"id": c.id, "fps": c.fps(), "people_in_view": len(c.boxes),
                          "last_frame_age_ms": c.age_ms()} for c in self.cameras.values()],
+            "sync": {name: g.view() for name, g in self.groups.items()},
         }
 
     def stats_view(self):
