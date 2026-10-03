@@ -16,6 +16,7 @@ const USAGE = [
   "       node ssw.mjs alert <id>",
   "       node ssw.mjs posted <id>",
   "       node ssw.mjs dispose <id> approved|false_alarm --by <slack_user_id>",
+  "       node ssw.mjs post-new",
 ].join("\n");
 
 function usage(msg) {
@@ -111,6 +112,27 @@ async function main(argv) {
       const by = rest[3].trim();
       if (!by) usage("--by needs a Slack user id");
       print(await call("POST", `/events/${id}/disposition`, { disposition, by }));
+      return;
+    }
+    case "post-new": {
+      // For the scheduled check (an OpenClaw command job, no model call): print the alert
+      // text of every new event and mark it posted, or NO_REPLY when there is nothing new.
+      if (rest.length) usage("post-new takes no arguments");
+      const events = await call("GET", "/events?status=new");
+      if (!Array.isArray(events)) fail("API /events response is not a list");
+      if (events.length === 0) {
+        process.stdout.write("NO_REPLY\n");
+        return;
+      }
+      const texts = [];
+      for (const ev of [...events].sort((a, b) => a.id - b.id)) {
+        const id = checkId(String(ev.id));
+        const alert = await call("GET", `/events/${id}/alert`);
+        if (typeof alert?.text !== "string") fail(`API alert for event ${id} has no text field`);
+        texts.push(alert.text);
+        await call("POST", `/events/${id}/posted`);
+      }
+      process.stdout.write(texts.join("\n\n") + "\n");
       return;
     }
     case undefined:
