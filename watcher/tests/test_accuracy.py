@@ -154,10 +154,20 @@ class TestHandleSwitches(unittest.TestCase):
 
 
 class TestEnhanceSafe(unittest.TestCase):
-    def test_enhance_returns_bytes(self):
-        # With or without OpenCV, a non-image input comes back unchanged (no crash).
-        out = enhance.enhance_jpeg(b"not-an-image")
+    def test_enhance_returns_input_and_no_transform_on_bad_input(self):
+        # With or without OpenCV, a non-image input comes back unchanged with no transform.
+        out, transform = enhance.enhance_jpeg(b"not-an-image")
         self.assertEqual(out, b"not-an-image")
+        self.assertIsNone(transform)
+
+    def test_untransform_box_maps_back_to_original(self):
+        # box in enhanced coords -> original coords given crop offset and 2x scale
+        box = enhance.untransform_box([10, 10, 20, 20],
+                                      {"ox": 100, "oy": 50, "scale": 2.0})
+        self.assertEqual(box, [105.0, 55.0, 10.0, 10.0])
+
+    def test_untransform_box_noop_without_transform(self):
+        self.assertEqual(enhance.untransform_box([1, 2, 3, 4], None), [1, 2, 3, 4])
 
 
 class TestVisionMapping(unittest.TestCase):

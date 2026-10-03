@@ -42,6 +42,7 @@ BLUR_FACES = os.environ.get("SSW_BLUR", "1") not in ("0", "false", "False", "")
 VOTE_SPEC = os.environ.get("SSW_VOTE", "")
 # Enhance the frame sent to the model: exit-zone crop, 2x upscale, CLAHE.
 ENHANCE = os.environ.get("SSW_ENHANCE", "0") not in ("0", "false", "False", "")
+ENHANCE_SCALE = float(os.environ.get("SSW_ENHANCE_SCALE", "2.0"))
 # Ask the model for the obstruction box and require it to overlap the exit zone.
 LOCATE = os.environ.get("SSW_LOCATE", "0") not in ("0", "false", "False", "")
 # Minimum fraction of the obstruction box that must fall inside the exit zone.

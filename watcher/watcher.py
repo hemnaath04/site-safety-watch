@@ -68,8 +68,9 @@ def _handle(conn, client, jpeg_bytes, clip_name, zone, log,
     hazard. Every frame is observed by the voter (when on) and logged to the decisions log.
     """
     vision_jpeg = jpeg_bytes
+    transform = None
     if enhance and jpeg_bytes:
-        vision_jpeg = enhance_mod.enhance_jpeg(jpeg_bytes, zone_box)
+        vision_jpeg, transform = enhance_mod.enhance_jpeg(jpeg_bytes, zone_box)
 
     try:
         event = client.classify(vision_jpeg, zone)
@@ -87,6 +88,10 @@ def _handle(conn, client, jpeg_bytes, clip_name, zone, log,
                and float(event.get("confidence", 0)) >= config.MIN_CONFIDENCE)
 
     box = event.get("box") if valid else None
+    # If the frame was enhanced (cropped/upscaled), map the box back to original coords so
+    # the overlap check, the stored box, the 3D highlight and the console overlay all agree.
+    if box and transform:
+        box = enhance_mod.untransform_box(box, transform)
     if present and locate and zone_box and box:
         if not locate_mod.in_zone(box, zone_box, config.LOCATE_MIN_OVERLAP):
             log(f"filtered: obstruction not in exit zone {zone}")
