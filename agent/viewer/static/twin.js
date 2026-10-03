@@ -527,7 +527,7 @@ async function boot() {
       scan.status = "failed";
       el.scanToggle.disabled = true;
       setScanMode(false);
-      setScanNote("Room scan did not load, showing the schematic room.");
+      setScanNote("3D model did not load, showing the schematic room.");
       console.warn("room scan failed", error);
     }
   }
@@ -859,7 +859,7 @@ async function boot() {
       buildRoom(cfg);
       const mesh = meshOverride ? normalizeMesh(cfg.room.mesh || {}, meshOverride) : cfg.room.mesh;
       if (mesh) loadScan(mesh);
-      else if (meshOverride) setScanNote("Room scan path is not valid, showing the schematic room.");
+      else if (meshOverride) setScanNote("3D model path is not valid, showing the schematic room.");
       buildCameraList(cfg);
       renderHud(null);
       buildViewButtons(cfg);
