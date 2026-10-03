@@ -1,0 +1,199 @@
+{
+ "room": {
+  "width_m": 13,
+  "depth_m": 18.3,
+  "walls": [
+   [
+    -6.7,
+    6.8
+   ],
+   [
+    2.55,
+    9.67
+   ],
+   [
+    6.3,
+    -5.96
+   ],
+   [
+    -3.3,
+    -8.6
+   ]
+  ],
+  "top_rotation_deg": -73,
+  "doors": [
+   {
+    "id": "exit_front_left",
+    "p1": [
+     0.9,
+     9.02
+    ],
+    "p2": [
+     1.76,
+     9.28
+    ],
+    "zone": "exit_front_left"
+   },
+   {
+    "id": "exit_front_right",
+    "p1": [
+     6.54,
+     -3.02
+    ],
+    "p2": [
+     6.74,
+     -3.9
+    ],
+    "zone": "exit_front_right"
+   }
+  ],
+  "mesh": {
+   "url": "/room.glb",
+   "scale": 1,
+   "rotation_deg": [
+    0,
+    0,
+    0
+   ],
+   "offset": [
+    0,
+    0,
+    2.7
+   ],
+   "opacity": 1,
+   "clip_height_m": 3.6
+  }
+ },
+ "cameras": [
+  {
+   "id": "cam_left",
+   "label": "Camera 1 (front-left exit)",
+   "source": "data/clips/hall/B_cam2.MOV",
+   "loop": true,
+   "sync_group": "takeB",
+   "start_offset_s": 0.0,
+   "door_id": "exit_front_left",
+   "door_crop": [
+    450,
+    0,
+    1150,
+    662
+   ],
+   "pose": {
+    "x": -4.6,
+    "y": 6.0,
+    "z": 2.1,
+    "look_at": [
+     1.33,
+     9.0,
+     1.0
+    ],
+    "hfov_deg": 80,
+    "yaw_deg": 25
+   },
+   "floor_points": {
+    "pixels": [
+     [
+      150,
+      650
+     ],
+     [
+      1750,
+      650
+     ],
+     [
+      1250,
+      420
+     ],
+     [
+      600,
+      400
+     ]
+    ],
+    "meters": [
+     [
+      -2.6,
+      6.0
+     ],
+     [
+      -1.0,
+      3.6
+     ],
+     [
+      1.8,
+      7.6
+     ],
+     [
+      0.8,
+      8.6
+     ]
+    ]
+   }
+  },
+  {
+   "id": "cam_right",
+   "label": "Camera 2 (front-right exit)",
+   "source": "data/clips/hall/B_cam1.MOV",
+   "loop": true,
+   "sync_group": "takeB",
+   "start_offset_s": 1.7,
+   "door_id": "exit_front_right",
+   "door_crop": [
+    1250,
+    380,
+    1650,
+    880
+   ],
+   "pose": {
+    "x": -3.08,
+    "y": -6.12,
+    "z": 2.4,
+    "look_at": [
+     3.14,
+     -1.09,
+     0.7
+    ],
+    "hfov_deg": 88,
+    "yaw_deg": 30
+   },
+   "floor_points": {
+    "pixels": [
+     [
+      200,
+      1070
+     ],
+     [
+      1700,
+      1070
+     ],
+     [
+      1600,
+      760
+     ],
+     [
+      500,
+      760
+     ]
+    ],
+    "meters": [
+     [
+      -1.0,
+      -4.0
+     ],
+     [
+      0.4,
+      -7.4
+     ],
+     [
+      5.2,
+      -5.0
+     ],
+     [
+      3.4,
+      0.4
+     ]
+    ]
+   }
+  }
+ ]
+}
