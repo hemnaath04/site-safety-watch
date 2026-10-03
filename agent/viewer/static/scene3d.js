@@ -3,7 +3,7 @@ import { OrbitControls } from "./vendor/OrbitControls.js";
 import { parseSceneBuffer } from "./scene3d-format.js";
 
 const REFRESH_MS = 2000;
-const HAZARD_COLOR = new THREE.Color("#ff6a32");
+const HAZARD_COLOR = new THREE.Color("#d8ff3f");
 const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 const elements = {

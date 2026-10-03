@@ -35,16 +35,17 @@ selected-event evidence view.
 
 ## Capabilities and Constraints
 
-Read-only. Polls the local event and scene services every two seconds, shows only real statuses
-and measurements, and falls back to honest empty states. A local Three.js panel reconstructs
-relative depth from the latest camera frame, preserves source colors and marks hazard points.
-Decisions happen in Slack. Blocked exit is the only hazard in scope. No placeholder numbers,
-faces, secrets, copied assets or em dashes.
+Read-only. Polls the local event and scene services every two seconds, including the confirmed
+resolved state, shows only real statuses and measurements, and falls back to honest empty
+states. A local Three.js panel reconstructs relative depth from the latest camera frame,
+preserves source colors and marks hazard points. Decisions happen in Slack. Blocked exit is the
+only hazard in scope. No placeholder numbers, faces, secrets, copied assets or em dashes.
 
 ## Brand Commitments
 
-Confirmed name: Site Safety Watch. Voice: factual, calm and operational. Dark by default, one
-hazard accent, one resolved accent, otherwise neutral. No decorative gradients or emoji.
+Confirmed name: Site Safety Watch. Voice: factual, calm and operational. The command wall uses
+a dark zinc field, high-visibility safety lime for active evidence, red for the camera source,
+amber for approved work and teal only for confirmed clearance. No decorative gradients or emoji.
 
 ## Evidence on Hand
 
