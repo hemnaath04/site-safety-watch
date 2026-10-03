@@ -1,7 +1,7 @@
 """De-duplication. Same hazard and zone inside a time window is one event, not many."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from . import config, store
 
@@ -16,7 +16,9 @@ def is_duplicate(conn, hazard: str, zone: str, when: datetime,
                  window_min: float | None = None) -> bool:
     """True if we already stored this hazard and zone inside the recent window."""
     window_min = config.DEDUP_WINDOW_MIN if window_min is None else window_min
-    since = (when - timedelta(minutes=window_min)).astimezone(timezone.utc)
+    # Keep `since` in the same (local) timezone as the stored timestamps so the string
+    # comparison below is chronological.
+    since = when - timedelta(minutes=window_min)
     since_iso = since.isoformat(timespec="seconds")
     key = make_dedup_key(hazard, zone, when, window_min)
     if store.recent_with_key(conn, key, since_iso):

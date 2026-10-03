@@ -11,8 +11,6 @@ capture_factory and encode.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 from . import config
 
 # OpenCV's CAP_PROP_FPS is the stable value 5; hardcode it so the generic loop below
@@ -86,5 +84,6 @@ def iter_frames(source, interval_sec=None, width=None, max_frames=None, stream=F
         cap.release()
 
 
-def utc_now():
-    return datetime.now(timezone.utc)
+def now_local():
+    # Timezone-aware local time, consistent with store.now_iso (honours SSW_TZ / TZ).
+    return config.now_local()

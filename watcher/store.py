@@ -5,8 +5,8 @@ Raw video never leaves the box; only frame paths and text live here.
 """
 from __future__ import annotations
 
+import json
 import sqlite3
-from datetime import datetime, timezone
 from pathlib import Path
 
 from . import config
@@ -24,18 +24,28 @@ CREATE TABLE IF NOT EXISTS events (
   dedup_key TEXT,
   status TEXT,
   disposition_by TEXT,
-  disposition_ts TEXT
+  disposition_ts TEXT,
+  box TEXT
 );
 """
 
 _COLUMNS = [
     "id", "ts", "clip", "hazard", "zone", "confidence", "explanation",
-    "frame_path", "dedup_key", "status", "disposition_by", "disposition_ts",
+    "frame_path", "dedup_key", "status", "disposition_by", "disposition_ts", "box",
 ]
 
 
+def _migrate(conn) -> None:
+    """Add the nullable box column to an older db that predates it."""
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(events)")]
+    if "box" not in cols:
+        conn.execute("ALTER TABLE events ADD COLUMN box TEXT")
+
+
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    # Local time (timezone aware) so the logs and alerts read in the site's clock, even
+    # inside a container with no system timezone.
+    return config.now_local().isoformat(timespec="seconds")
 
 
 def connect(db_path: Path | None = None) -> sqlite3.Connection:
@@ -44,20 +54,31 @@ def connect(db_path: Path | None = None) -> sqlite3.Connection:
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute(SCHEMA)
+    _migrate(conn)
     return conn
 
 
 def _row_to_dict(row: sqlite3.Row) -> dict:
-    return {k: row[k] for k in _COLUMNS}
+    d = {k: row[k] for k in _COLUMNS}
+    # box is stored as a JSON string; emit it as an array (or None) so the console, the 3D
+    # view and the twin get a real list, not a string.
+    if d.get("box"):
+        try:
+            d["box"] = json.loads(d["box"])
+        except (ValueError, TypeError):
+            d["box"] = None
+    return d
 
 
 def insert_event(conn, *, clip, hazard, zone, confidence, explanation,
-                 frame_path, dedup_key, ts=None) -> dict:
+                 frame_path, dedup_key, box=None, ts=None) -> dict:
     ts = ts or now_iso()
+    box_json = json.dumps(box) if box is not None else None
     cur = conn.execute(
         "INSERT INTO events (ts, clip, hazard, zone, confidence, explanation, "
-        "frame_path, dedup_key, status) VALUES (?,?,?,?,?,?,?,?, 'new')",
-        (ts, clip, hazard, zone, float(confidence), explanation, frame_path, dedup_key),
+        "frame_path, dedup_key, status, box) VALUES (?,?,?,?,?,?,?,?, 'new', ?)",
+        (ts, clip, hazard, zone, float(confidence), explanation, frame_path,
+         dedup_key, box_json),
     )
     conn.commit()
     return get_event(conn, cur.lastrowid)
