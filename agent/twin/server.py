@@ -55,6 +55,9 @@ DOOR_S = float(os.environ.get("TWIN_DOOR_S", "3"))
 DET_MODEL_DIR = os.environ.get("TWIN_DET_MODEL", "/models/rtdetr_v2_r18vd")
 SCORE_TH = float(os.environ.get("TWIN_SCORE", "0.5"))
 PERSON_LABEL = int(os.environ.get("TWIN_PERSON_LABEL", "0"))
+# Faces are blurred in every frame the twin serves. A lower score than counting, so people the
+# counter ignores are still blurred.
+BLUR_SCORE = float(os.environ.get("TWIN_BLUR_SCORE", "0.25"))
 VLLM_BASE_URL = os.environ.get("VLLM_BASE_URL", "http://127.0.0.1:8000/v1").rstrip("/")
 VISION_MODEL = os.environ.get("SSW_MODEL", "nvidia/Qwen3.6-35B-A3B-NVFP4")
 STALE_S = 2.0
@@ -90,6 +93,25 @@ def approach_zone(door: dict, walls, depth_m: float = 1.2, pad_m: float = 0.2):
     return [[round(a[0], 3), round(a[1], 3)], [round(b[0], 3), round(b[1], 3)],
             [round(b[0] + depth_m * nx, 3), round(b[1] + depth_m * ny, 3)],
             [round(a[0] + depth_m * nx, 3), round(a[1] + depth_m * ny, 3)]]
+
+
+def blur_heads(img, boxes, scale=1.0):
+    """Pixelate the head region of each person box in place. Generous margins cover the
+    movement between a detection and the frame it is drawn on."""
+    ih, iw = img.shape[:2]
+    for box, _score in boxes:
+        x1, y1, x2, y2 = (v * scale for v in box)
+        bw, bh = max(1.0, x2 - x1), max(1.0, y2 - y1)
+        hx1, hx2 = int(max(0, x1 - 0.3 * bw)), int(min(iw, x2 + 0.3 * bw))
+        hy1, hy2 = int(max(0, y1 - 0.08 * bh)), int(min(ih, y1 + 0.32 * bh))
+        if hx2 - hx1 < 2 or hy2 - hy1 < 2:
+            continue
+        roi = img[hy1:hy2, hx1:hx2]
+        small = cv2.resize(roi, (max(1, (hx2 - hx1) // 12), max(1, (hy2 - hy1) // 12)),
+                           interpolation=cv2.INTER_LINEAR)
+        img[hy1:hy2, hx1:hx2] = cv2.resize(small, (hx2 - hx1, hy2 - hy1),
+                                           interpolation=cv2.INTER_NEAREST)
+    return img
 
 
 def log(msg: str) -> None:
@@ -148,6 +170,7 @@ class Camera:
         self.frame_t = 0.0
         self.times = deque(maxlen=240)
         self.boxes = []
+        self.blur_boxes = []
         self.door_report = None
 
     def set_floor_points(self, fp):
@@ -313,13 +336,13 @@ class Detector:
             batch_ms = (time.perf_counter() - t0) * 1000.0
             res = self.processor.post_process_object_detection(
                 types.SimpleNamespace(logits=out.logits.float(), pred_boxes=out.pred_boxes.float()),
-                threshold=SCORE_TH, target_sizes=[list(s) for s in sizes])
+                threshold=min(SCORE_TH, BLUR_SCORE), target_sizes=[list(s) for s in sizes])
         per_frame = []
         for r in res:
             people = []
             for score, label, box in zip(r["scores"].tolist(), r["labels"].tolist(),
                                          r["boxes"].tolist()):
-                if int(label) == PERSON_LABEL and score >= SCORE_TH:
+                if int(label) == PERSON_LABEL and score >= min(SCORE_TH, BLUR_SCORE):
                     people.append(([round(v, 1) for v in box], round(score, 3)))
             per_frame.append(people)
         return per_frame, batch_ms
@@ -410,7 +433,9 @@ class Twin:
         results, ms = self.detector.detect(frames)
         now = time.monotonic()
         per_cam = {}
-        for cam, people in zip(cams, results):
+        for cam, found_all in zip(cams, results):
+            cam.blur_boxes = found_all
+            people = [p for p in found_all if p[1] >= SCORE_TH]
             cam.boxes = people
             found = []
             if cam.H is not None and people:
@@ -582,11 +607,13 @@ class Twin:
         if frame is None:
             return None
         if raw:
+            frame = blur_heads(frame.copy(), list(cam.blur_boxes))
             ok, jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
             return jpg.tobytes() if ok else None
         h, w = frame.shape[:2]
         s = 640.0 / w
         img = cv2.resize(frame, (640, max(1, round(h * s))))
+        blur_heads(img, list(cam.blur_boxes), s)
         for box, score in list(cam.boxes):
             x1, y1, x2, y2 = (int(round(v * s)) for v in box)
             cv2.rectangle(img, (x1, y1), (x2, y2), (80, 220, 80), 2)
