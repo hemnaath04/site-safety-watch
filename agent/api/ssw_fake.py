@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from rules import get_rule  # noqa: E402
 
-STATUSES = ("new", "posted", "approved", "false_alarm")
+STATUSES = ("new", "posted", "approved", "false_alarm", "resolved")
 DISPOSITIONS = ("approved", "false_alarm")
 
 

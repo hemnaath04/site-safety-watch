@@ -248,7 +248,8 @@ class Handler(BaseHTTPRequestHandler):
             box = None
         event = fetch_event(event_id)
         if box is None:
-            box = parse_box(event.get("box"))
+            xywh = parse_box(event.get("box"))  # stored as [x, y, width, height] in pixels
+            box = [xywh[0], xywh[1], xywh[0] + xywh[2], xywh[1] + xywh[3]] if xywh else None
         rgb = load_rgb(safe_frame_path(event.get("frame_path")))
         self._binary(self._render(rgb, box, {"event_id": int(event_id)}, t0))
 

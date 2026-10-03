@@ -254,9 +254,9 @@ class StatsApiTest(ServerCase):
         self.assertEqual(code, 200)
         self.assertEqual(body["total"], 5)
         self.assertEqual(body["by_status"],
-                         {"new": 1, "posted": 2, "approved": 1, "false_alarm": 1})
+                         {"new": 1, "posted": 2, "approved": 1, "false_alarm": 1, "resolved": 0})
         self.assertEqual(body["by_zone"]["exit_a"],
-                         {"total": 3, "open": 2, "approved": 1, "false_alarm": 0})
+                         {"total": 3, "open": 2, "approved": 1, "false_alarm": 0, "resolved": 0})
         self.assertEqual(body["open_event_ids"], [2, 1, 3])
         self.assertEqual(body["median_minutes_to_decision"], 7.0)
         self.assertAlmostEqual(body["longest_open_minutes"], 25.0, delta=0.5)
