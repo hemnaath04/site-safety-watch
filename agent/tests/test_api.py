@@ -178,3 +178,41 @@ class AlertUnitTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RealCliNotFoundTest(unittest.TestCase):
+    """The watcher's ssw prints {"error": "not found"} (with a space) and exits 1."""
+
+    def test_not_found_with_space_maps_to_404(self):
+        tmp = tempfile.TemporaryDirectory()
+        stub = Path(tmp.name) / "ssw_stub.py"
+        stub.write_text(
+            "import json, sys\n"
+            "print(json.dumps({'error': 'not found', 'id': 999}))\n"
+            "sys.exit(1)\n"
+        )
+        port = free_port()
+        env = dict(os.environ)
+        env.update({
+            "SSW_CMD": f"{sys.executable} {stub}",
+            "SSW_API_HOST": "127.0.0.1",
+            "SSW_API_PORT": str(port),
+        })
+        proc = subprocess.Popen([sys.executable, str(API_DIR / "server.py")], env=env,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            deadline = time.time() + 10
+            code = None
+            while time.time() < deadline:
+                try:
+                    urllib.request.urlopen(f"http://127.0.0.1:{port}/events/999", timeout=2)
+                except urllib.error.HTTPError as e:
+                    code = e.code
+                    break
+                except OSError:
+                    time.sleep(0.05)
+            self.assertEqual(code, 404)
+        finally:
+            proc.terminate()
+            proc.wait(timeout=5)
+            tmp.cleanup()

@@ -1,0 +1,30 @@
+# Lets the agent's Node tool (agent/skill/site-safety-watch/ssw.mjs) inside the OpenShell
+# sandbox reach the Site Safety Watch event API on the box (agent/api/server.py, port 8100).
+# host.openshell.internal is the sandbox's name for the box on the openshell-docker bridge
+# (172.18.0.1 today); the API listens there only, never on the venue Wi-Fi.
+# Apply on the box: nemoclaw safety policy add --from-file agent/policy/ssw-api.yaml --yes
+
+preset:
+  name: ssw-api
+  description: "Site Safety Watch event API on the host (read events, mark posted, record decisions)"
+
+network_policies:
+  ssw_api:
+    name: ssw_api
+    endpoints:
+      - host: host.openshell.internal
+        port: 8100
+        protocol: rest
+        enforcement: enforce
+        allowed_ips:
+          # OpenShell's SSRF guard rejects private host-gateway IPs unless allowlisted.
+          - 172.16.0.0/12
+        rules:
+          - allow: { method: GET, path: "/health" }
+          - allow: { method: GET, path: "/pending" }
+          - allow: { method: GET, path: "/events" }
+          - allow: { method: GET, path: "/events/**" }
+          - allow: { method: POST, path: "/events/**" }
+    binaries:
+      - { path: /usr/local/bin/node }
+      - { path: /usr/bin/node }
