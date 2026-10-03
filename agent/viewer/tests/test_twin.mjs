@@ -19,7 +19,10 @@ import {
   predictPosition,
   smoothFactor,
   statsEntries,
-  viewPose,
+  cameraView,
+  clipPlaneFor,
+  topView,
+  viewButtons,
   wallPieces,
 } from "../static/twin.js";
 import { MOCK_CONFIG, cameraSees, createMockTwin, mockState } from "../static/twin-mock.js";
@@ -163,20 +166,80 @@ test("normalizeState drops bad rows and nulls missing numbers", () => {
   assert.equal(s.cameras[0].people_in_view, null);
 });
 
-test("view presets: top looks down, door looks at the first door from inside", () => {
+test("top view fits the walls and looks straight down", () => {
   const cfg = normalizeConfig(MOCK_CONFIG);
-  const top = viewPose("top", cfg);
-  close(top.position[0], top.target[0]);
-  assert.ok(top.position[1] > 5);
-  const door = viewPose("door", cfg);
-  close(door.target[0], 3.9);
-  close(door.target[2], 0);
-  assert.ok(door.position[2] < 0, "camera is inside the room (scene z negative)");
-  const iso = viewPose("isometric", cfg);
-  assert.ok(iso.position[1] > 3);
-  assert.deepEqual(viewPose("door", { room: { ...cfg.room, doors: [] } }), viewPose("isometric", { room: { ...cfg.room, doors: [] } }));
+  const v = topView(cfg, 1);
+  close(v.target[0], 4);
+  close(v.target[2], -3);
+  assert.ok(v.position[1] > 10);
+  close(v.position[0], 4, 1e-9);
+  close(v.position[2], -3 + 0.01, 1e-9); // nudged toward screen-bottom (floor -y is three +z)
+  close(v.halfWidth, v.halfHeight); // aspect 1
+  assert.ok(v.halfWidth >= 4 && v.halfWidth < 4.5);
+  const wide = topView(cfg, 2);
+  close(wide.halfWidth / wide.halfHeight, 2);
+  assert.ok(wide.halfWidth >= 4 && wide.halfHeight >= 3);
+  nearArr(v.screenUp, [0, 0, -1]);
 });
 
+test("top_rotation_deg turns the room on screen", () => {
+  const cfg = normalizeConfig({ ...MOCK_CONFIG, room: { ...MOCK_CONFIG.room, top_rotation_deg: 90 } });
+  assert.equal(cfg.room.top_rotation_deg, 90);
+  const v = topView(cfg, 1);
+  // screen-up is floor +y turned 90 degrees counterclockwise: floor -x, three -x
+  nearArr(v.screenUp, [-1, 0, 0]);
+  close(v.target[0], 4);
+  close(v.target[2], -3);
+  close(v.position[0], 4 + 0.01);
+});
+
+test("camera view: pose and look_at in floor meters map to three.js position and target", () => {
+  const cam = { id: "c", pose: { x: 1, y: 5, z: 2.6, yaw_deg: 0, look_at: [4, 1, 0.5], hfov_deg: 90 } };
+  const v = cameraView(cam, 1);
+  assert.deepEqual(v.position, [1, 2.6, -5]);
+  assert.deepEqual(v.target, [4, 0.5, -1]);
+  close(v.hfovDeg, 90);
+  close(v.vfovDeg, 90); // aspect 1
+  const wide = cameraView(cam, 16 / 9);
+  close(Math.tan((wide.vfovDeg * Math.PI) / 360) * (16 / 9), Math.tan(Math.PI / 4));
+});
+
+test("camera view defaults: 2.0 m high, 70 degree hfov, aimed along yaw", () => {
+  const v = cameraView({ id: "c", pose: { x: 0, y: 0, yaw_deg: 90 } }, 16 / 9);
+  nearArr(v.position, [0, 2, 0]);
+  nearArr(v.target, [0, 1, -3]); // 3 m along floor +y (three -z), 1 m high
+  close(v.hfovDeg, 70);
+  const bad = cameraView({ id: "c", pose: { x: 0, y: 0, yaw_deg: 0, hfov_deg: 400, look_at: [1, "x"] } }, 1);
+  close(bad.hfovDeg, 70);
+  nearArr(bad.target, [3, 1, 0]);
+});
+
+test("config keeps camera height, look_at, hfov and label", () => {
+  const cfg = normalizeConfig({
+    ...MOCK_CONFIG,
+    cameras: [{ id: "cam_1", label: " Exit A ", pose: { x: 1, y: 2, yaw_deg: 0, z: 2.4, hfov_deg: 80, look_at: [3, 0, 0, 9] } }, { id: "cam_2", pose: { x: 1, y: 2, yaw_deg: 0, look_at: ["a", 1] } }],
+  });
+  assert.equal(cfg.cameras[0].label, "Exit A");
+  assert.deepEqual(cfg.cameras[0].pose, { x: 1, y: 2, yaw_deg: 0, z: 2.4, hfov_deg: 80, look_at: [3, 0, 0] });
+  assert.equal(cfg.cameras[1].label, null);
+  assert.equal(cfg.cameras[1].pose.look_at, undefined);
+  assert.deepEqual(viewButtons(cfg), [
+    { view: "top", label: "Top" },
+    { view: "cam:cam_1", label: "Exit A" },
+    { view: "cam:cam_2", label: "cam_2" },
+  ]);
+});
+
+test("scan clip plane keeps geometry at or below clip_height_m", () => {
+  assert.deepEqual(clipPlaneFor(normalizeMesh({ url: "/r.glb" })), { normal: [0, -1, 0], constant: 2.3 });
+  assert.deepEqual(clipPlaneFor(normalizeMesh({ url: "/r.glb", clip_height_m: 1.9 })), { normal: [0, -1, 0], constant: 1.9 });
+  assert.equal(clipPlaneFor(normalizeMesh({ url: "/r.glb", clip_height_m: -1 })).constant, 2.3);
+  assert.equal(clipPlaneFor(null).constant, 2.3);
+  const { normal, constant } = clipPlaneFor(normalizeMesh({ url: "/r.glb", clip_height_m: 2 }));
+  const plane = new THREE.Plane(new THREE.Vector3(...normal), constant);
+  assert.ok(plane.distanceToPoint(new THREE.Vector3(3, 1.5, -2)) > 0, "below the cut is kept");
+  assert.ok(plane.distanceToPoint(new THREE.Vector3(3, 2.5, -2)) < 0, "ceiling is clipped");
+});
 test("mock: door toggles every 6 s, exit blocked from 20 s to 40 s", () => {
   assert.equal(mockState(1).doors[0].open, false);
   assert.equal(mockState(7).doors[0].open, true);
@@ -245,7 +308,7 @@ test("floor coords map to three.js: y into the room is -z, z up is +y", () => {
 });
 
 test("normalizeMesh applies defaults and refuses other hosts", () => {
-  assert.deepEqual(normalizeMesh({ url: "/room.glb" }), { url: "/room.glb", scale: 1, rotation_deg: [0, 0, 0], offset: [0, 0, 0], opacity: 1 });
+  assert.deepEqual(normalizeMesh({ url: "/room.glb" }), { url: "/room.glb", scale: 1, rotation_deg: [0, 0, 0], offset: [0, 0, 0], opacity: 1, clip_height_m: 2.3 });
   assert.equal(normalizeMesh(null), null);
   assert.equal(normalizeMesh({ url: "https://example.com/room.glb" }), null);
   assert.equal(normalizeMesh({ url: "//example.com/room.glb" }), null);

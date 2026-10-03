@@ -38,9 +38,8 @@
         <div class="twin-labels" id="twin-labels" aria-hidden="true"></div>
 
         <div class="twin-toolbar" role="group" aria-label="View">
-          <button type="button" data-view="isometric" aria-pressed="true">Isometric</button>
-          <button type="button" data-view="top" aria-pressed="false">Top</button>
-          <button type="button" data-view="door" aria-pressed="false">Door</button>
+          <button type="button" data-view="top" aria-pressed="true">Top</button>
+          <span class="twin-camera-views" id="twin-camera-views"></span>
           <span class="twin-toolbar-sep" aria-hidden="true"></span>
           <button type="button" id="twin-scan-toggle" aria-pressed="false" hidden>Room scan</button>
         </div>
@@ -68,6 +67,7 @@
           <span>Nothing is shown until the twin service on this box answers.</span>
         </div>
         <div class="twin-mock-tag" aria-hidden="true">Mock data</div>
+        <p class="twin-scan-credit" id="twin-scan-credit" hidden>Site model: one-time LiDAR scan. Live state: computed on the GB10.</p>
       </div>
     </section>
 
