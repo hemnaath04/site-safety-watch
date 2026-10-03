@@ -1,4 +1,42 @@
 {
-  "exit_a": { "exit_box": null },
-  "_help": "Per zone config. Set exit_box to [x, y, width, height] in pixels of the exit route for ENHANCE cropping and LOCATE overlap. Leave null to use the whole frame."
+  "exit_a": {
+    "exit_box": null
+  },
+  "_help": "Per zone config. Set exit_box to [x, y, width, height] in pixels of the exit route for ENHANCE cropping and LOCATE overlap. Leave null to use the whole frame.",
+  "exit_front_left": {
+    "exit_box": [
+      225,
+      0,
+      350,
+      331
+    ],
+    "_camera": "hall take B, phone 2 (1918x662 source)"
+  },
+  "exit_front_right": {
+    "exit_box": [
+      610,
+      200,
+      220,
+      260
+    ],
+    "_camera": "hall take B, phone 1"
+  },
+  "exit_front_left_a": {
+    "exit_box": [
+      325,
+      215,
+      155,
+      185
+    ],
+    "_camera": "hall take A, phone 1 (also take C)"
+  },
+  "exit_front_right_a": {
+    "exit_box": [
+      690,
+      160,
+      150,
+      190
+    ],
+    "_camera": "hall take A, phone 2"
+  }
 }

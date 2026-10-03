@@ -56,8 +56,12 @@ VISION_SCHEMA = {
 VISION_PROMPT = (
     "You are a workplace safety inspector looking at one still frame from a site camera. "
     "Decide two things: is an exit route or exit door visible in the frame (exit_visible), "
-    "and is it blocked by anything such as a cart, boxes, a stack of chairs or equipment "
-    "(blocked). If an exit is blocked, give box as the bounding box of the obstruction, "
+    "and is it blocked (blocked). OSHA 29 CFR 1910.37: exit routes must be free and "
+    "unobstructed, so any movable item (standing table, stand, chair, cart, boxes, equipment) "
+    "placed in front of an exit door or in the floor area people use to reach it counts as "
+    "blocked, even if someone could squeeze past. Ignore permanent fixtures: built-in desks and "
+    "seating rows, handrails, walls and pillars. If an exit is blocked, give box as the bounding "
+    "box of the obstruction, "
     "otherwise box is null. Give a confidence from 0.0 to 1.0 and a one sentence explanation."
     # Note: Qwen returns the box as 0..1000 xyxy regardless of wording; vision.py converts it
     # to pixel [x, y, w, h] of the frame.
@@ -65,8 +69,11 @@ VISION_PROMPT = (
 
 # Stricter re-ask used by the second look. Same enforced schema, so the reply still parses.
 SECOND_LOOK_PROMPT = (
-    "Look again carefully at this frame. Set blocked to true only if an exit route or exit "
-    "door is clearly obstructed; if you are unsure, set blocked to false. Report exit_visible, "
+    "Look again carefully at this frame. Set blocked to true only if a movable item (standing "
+    "table, stand, chair, cart, boxes, equipment) is placed in front of an exit door or in its "
+    "approach (OSHA 29 CFR 1910.37: exit routes free and unobstructed). Built-in desks, seating "
+    "rows, handrails, walls and pillars do not count. If you are unsure, set blocked to false. "
+    "Report exit_visible, "
     "blocked, box, confidence and a one sentence explanation."
 )
 
