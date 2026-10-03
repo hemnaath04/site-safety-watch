@@ -5,6 +5,25 @@ Pure geometry, fully unit tested. Boxes are [x, y, width, height] in pixels.
 from __future__ import annotations
 
 
+def qwen_xyxy1000_to_xywh(box, width, height):
+    """Convert Qwen-VL's native box to pixel [x, y, w, h] of a width x height image.
+
+    Qwen3.6 returns the box as [x1, y1, x2, y2] on a 0..1000 scale regardless of the prompt,
+    so we rescale to pixels and turn the corners into an origin plus size. Corners are sorted
+    so a flipped box still gives a positive size.
+    """
+    if not box or len(box) != 4 or not width or not height:
+        return box
+    x1, y1, x2, y2 = (float(v) for v in box)
+    x1, x2 = sorted((x1, x2))
+    y1, y2 = sorted((y1, y2))
+    px1 = x1 * width / 1000.0
+    py1 = y1 * height / 1000.0
+    px2 = x2 * width / 1000.0
+    py2 = y2 * height / 1000.0
+    return [px1, py1, px2 - px1, py2 - py1]
+
+
 def _area(box) -> float:
     return max(0.0, float(box[2])) * max(0.0, float(box[3]))
 

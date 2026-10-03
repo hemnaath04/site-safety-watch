@@ -56,6 +56,21 @@ ZONES_FILE = Path(os.environ.get("SSW_ZONES", REPO_ROOT / "watcher" / "zones.jso
 # Per-frame decision log for debugging and the eval.
 DECISIONS_LOG = Path(os.environ.get("SSW_DECISIONS", DATA_DIR / "decisions.jsonl"))
 
+# Local timezone for stored timestamps. Inside the vLLM container there is no system TZ, so
+# astimezone() falls back to UTC; use an explicit zone instead. SSW_TZ wins, then TZ, then
+# a sensible venue default.
+TZ_NAME = os.environ.get("SSW_TZ") or os.environ.get("TZ") or "America/New_York"
+
+
+def now_local():
+    """Timezone-aware 'now' in TZ_NAME, with a safe fallback to the machine's local zone."""
+    from datetime import datetime
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo(TZ_NAME))
+    except Exception:
+        return datetime.now().astimezone()
+
 
 def ensure_dirs() -> None:
     FRAMES_DIR.mkdir(parents=True, exist_ok=True)

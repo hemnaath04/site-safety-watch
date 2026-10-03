@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime
 from pathlib import Path
 
 from . import config
@@ -44,8 +43,9 @@ def _migrate(conn) -> None:
 
 
 def now_iso() -> str:
-    # Local time (timezone aware) so the logs and alerts read in the site's clock.
-    return datetime.now().astimezone().isoformat(timespec="seconds")
+    # Local time (timezone aware) so the logs and alerts read in the site's clock, even
+    # inside a container with no system timezone.
+    return config.now_local().isoformat(timespec="seconds")
 
 
 def connect(db_path: Path | None = None) -> sqlite3.Connection:
@@ -59,7 +59,15 @@ def connect(db_path: Path | None = None) -> sqlite3.Connection:
 
 
 def _row_to_dict(row: sqlite3.Row) -> dict:
-    return {k: row[k] for k in _COLUMNS}
+    d = {k: row[k] for k in _COLUMNS}
+    # box is stored as a JSON string; emit it as an array (or None) so the console, the 3D
+    # view and the twin get a real list, not a string.
+    if d.get("box"):
+        try:
+            d["box"] = json.loads(d["box"])
+        except (ValueError, TypeError):
+            d["box"] = None
+    return d
 
 
 def insert_event(conn, *, clip, hazard, zone, confidence, explanation,

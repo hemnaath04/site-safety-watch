@@ -57,9 +57,10 @@ VISION_PROMPT = (
     "You are a workplace safety inspector looking at one still frame from a site camera. "
     "Decide two things: is an exit route or exit door visible in the frame (exit_visible), "
     "and is it blocked by anything such as a cart, boxes, a stack of chairs or equipment "
-    "(blocked). If an exit is blocked, give box as the obstruction box [x, y, width, height] "
-    "in pixels, otherwise box is null. Give a confidence from 0.0 to 1.0 and a one sentence "
-    "explanation."
+    "(blocked). If an exit is blocked, give box as the bounding box of the obstruction, "
+    "otherwise box is null. Give a confidence from 0.0 to 1.0 and a one sentence explanation."
+    # Note: Qwen returns the box as 0..1000 xyxy regardless of wording; vision.py converts it
+    # to pixel [x, y, w, h] of the frame.
 )
 
 # Stricter re-ask used by the second look. Same enforced schema, so the reply still parses.

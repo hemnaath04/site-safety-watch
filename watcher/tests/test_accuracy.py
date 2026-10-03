@@ -73,7 +73,8 @@ class TestBoxColumn(unittest.TestCase):
             self.conn, clip="c", hazard="blocked_exit", zone="zb", confidence=0.9,
             explanation="x", frame_path="f", dedup_key="k", box=[1, 2, 3, 4])
         got = store.get_event(self.conn, row["id"])
-        self.assertEqual(json.loads(got["box"]), [1, 2, 3, 4])
+        # box comes back as a real array, not a JSON string
+        self.assertEqual(got["box"], [1, 2, 3, 4])
 
     def test_box_defaults_null(self):
         row = store.insert_event(
@@ -138,7 +139,7 @@ class TestHandleSwitches(unittest.TestCase):
         row = watcher_mod._handle(self.conn, client, None, "c", "zl2", _noop,
                                   locate=True, zone_box=[0, 0, 100, 100], do_blur=False)
         self.assertIsNotNone(row)
-        self.assertEqual(json.loads(row["box"]), [10, 10, 10, 10])
+        self.assertEqual(row["box"], [10, 10, 10, 10])
 
     def test_verifier_rejection_filters(self):
         client = vision.FakeVision()
@@ -196,13 +197,38 @@ class TestVisionMapping(unittest.TestCase):
 
 
 class TestLocalTime(unittest.TestCase):
-    def test_now_iso_is_timezone_aware_local(self):
+    def test_now_iso_is_timezone_aware(self):
         from datetime import datetime
         s = store.now_iso()
         dt = datetime.fromisoformat(s)
         self.assertIsNotNone(dt.tzinfo)
-        # offset matches this machine's local offset
-        self.assertEqual(dt.utcoffset(), datetime.now().astimezone().utcoffset())
+        self.assertIsNotNone(dt.utcoffset())
+
+    def test_named_zone_data_is_available(self):
+        # Fix for the container having no system TZ: a named zone must resolve to a real
+        # offset (never UTC), which is what store.now_iso relies on.
+        try:
+            from zoneinfo import ZoneInfo
+        except Exception:
+            self.skipTest("zoneinfo not available")
+        from datetime import datetime
+        off = datetime.now(ZoneInfo("America/New_York")).utcoffset().total_seconds() / 3600
+        self.assertIn(off, (-5.0, -4.0))
+
+
+class TestBoxConversion(unittest.TestCase):
+    def test_qwen_xyxy1000_to_pixels(self):
+        # Hemnaath's box-check example: raw [270,600,669,918] on a 960 x 1706 frame.
+        out = locate.qwen_xyxy1000_to_xywh([270, 600, 669, 918], 960, 1706)
+        self.assertAlmostEqual(out[0], 259.2, places=1)
+        self.assertAlmostEqual(out[1], 1023.6, places=1)
+        self.assertAlmostEqual(out[2], 383.04, places=1)
+        self.assertAlmostEqual(out[3], 542.508, places=1)
+
+    def test_flipped_corners_give_positive_size(self):
+        out = locate.qwen_xyxy1000_to_xywh([669, 918, 270, 600], 1000, 1000)
+        self.assertGreater(out[2], 0)
+        self.assertGreater(out[3], 0)
 
 
 if __name__ == "__main__":

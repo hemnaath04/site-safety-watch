@@ -10,7 +10,22 @@ import base64
 import json
 import urllib.request
 
-from . import config, rules
+from . import config, locate, rules
+
+
+def _jpeg_dims(jpeg_bytes):
+    """Return (width, height) of a JPEG, or (None, None) if it cannot be read."""
+    try:
+        import cv2
+        import numpy as np
+        arr = np.frombuffer(jpeg_bytes, dtype=np.uint8)
+        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if img is None:
+            return None, None
+        h, w = img.shape[:2]
+        return w, h
+    except Exception:
+        return None, None
 
 
 def _extract_json(text: str) -> dict:
@@ -86,7 +101,14 @@ class RealVision:
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:
             body = json.loads(resp.read().decode("utf-8"))
         content = body["choices"][0]["message"]["content"]
-        return to_event(_extract_json(content), zone)
+        event = to_event(_extract_json(content), zone)
+        # Qwen returns the box as 0..1000 xyxy of the image it saw (this jpeg); convert it to
+        # pixel [x, y, w, h] of that image so the overlap check and the stored box are right.
+        if event.get("box"):
+            w, h = _jpeg_dims(jpeg_bytes)
+            if w and h:
+                event["box"] = locate.qwen_xyxy1000_to_xywh(event["box"], w, h)
+        return event
 
 
 class FakeVision:
