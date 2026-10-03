@@ -49,6 +49,31 @@ SECOND_LOOK_PROMPT = (
 )
 
 
+# LOCATE variant: also ask for the obstruction box so code can check it is in the exit zone.
+LOCATE_PROMPT = (
+    "You are a workplace safety inspector looking at one still frame from a site camera. "
+    "Check only for this hazard: a blocked exit, meaning anything placed in or blocking an "
+    "exit route or an exit door. If the exit route is clear, the hazard is none. "
+    "Reply with ONLY this JSON and nothing else: "
+    '{"hazard": "blocked_exit" or "none", '
+    '"confidence": a number from 0.0 to 1.0, '
+    '"explanation": "one sentence naming what is blocking the exit, or why it is clear", '
+    '"box": [x, y, width, height] of the obstruction in pixels, or null if none}'
+)
+
+
+def _valid_box(box) -> bool:
+    """A box is optional; if present it must be four non-negative numbers."""
+    if box is None:
+        return True
+    if not isinstance(box, (list, tuple)) or len(box) != 4:
+        return False
+    try:
+        return all(float(v) >= 0 for v in box)
+    except (TypeError, ValueError):
+        return False
+
+
 def validate_event(obj) -> bool:
     """Guard against malformed model output before anything is stored."""
     if not isinstance(obj, dict):
@@ -62,5 +87,7 @@ def validate_event(obj) -> bool:
     if not 0.0 <= c <= 1.0:
         return False
     if not isinstance(obj.get("explanation", ""), str):
+        return False
+    if not _valid_box(obj.get("box")):
         return False
     return True

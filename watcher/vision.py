@@ -70,9 +70,10 @@ class FakeVision:
     drive a sequence, for example ["none", "none", "blocked_exit"]. jpeg_bytes may be None.
     """
 
-    def __init__(self, script=None, confidence=0.92):
+    def __init__(self, script=None, confidence=0.92, box=None):
         self.script = list(script) if script else None
         self.confidence = confidence
+        self.box = box
         self._i = 0
 
     def classify(self, jpeg_bytes, zone: str, prompt: str | None = None) -> dict:
@@ -88,7 +89,7 @@ class FakeVision:
             explanation = "the exit route is clear"
             conf = 0.95
         return {"hazard": hazard, "zone": zone, "confidence": conf,
-                "explanation": explanation}
+                "explanation": explanation, "box": self.box}
 
 
 def get_vision(fake: bool):

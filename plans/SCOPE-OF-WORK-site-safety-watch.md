@@ -20,11 +20,14 @@ else starts until that loop has been recorded once.
   "hazard": "blocked_exit | none",
   "zone": "exit_a",
   "confidence": 0.0,
-  "explanation": "one sentence: what in the frame is blocking the exit"
+  "explanation": "one sentence: what in the frame is blocking the exit",
+  "box": [0, 0, 0, 0]
 }
 ```
 Later hazards (`spill`, `trip_cable`) are added to the enum only after Gate 2.
 `zone` comes from the clip's camera config, not from the model.
+`box` is optional (post-lock, for LOCATE): the obstruction box `[x, y, width, height]` in
+pixels, or `null`. The watcher accepts events with or without it.
 
 ### 0.2 SQLite schema (`data/ssw.db`, owned by Mithuna, the single source of truth)
 ```sql
@@ -40,10 +43,12 @@ CREATE TABLE events (
   dedup_key TEXT,        -- hazard + zone + time bucket
   status TEXT,           -- new | posted | approved | false_alarm
   disposition_by TEXT,   -- Slack user who approved or rejected
-  disposition_ts TEXT
+  disposition_ts TEXT,
+  box TEXT               -- optional (post-lock, LOCATE): JSON [x,y,w,h] or null
 );
 ```
 A work order is this row with status `approved`; there is no second table or service.
+The `box` column is nullable and added by a safe migration, so older databases keep working.
 
 ### 0.3 Rule table (plain table in code, not the model)
 ```

@@ -17,6 +17,9 @@ import sys
 from pathlib import Path
 
 from . import blur, config, dedup, motion, rules, store, vision, zones
+from . import enhance as enhance_mod
+from . import locate as locate_mod
+from . import verifier, voting
 from .sampler import utc_now
 
 
@@ -48,61 +51,125 @@ def _confirm(client, jpeg_bytes, zone, hazard, log):
     return True
 
 
-def _handle(conn, client, jpeg_bytes, clip_name, zone, log,
-            second_look=False, do_blur=True):
-    """Classify one frame and store a new event if it is a real, non-duplicate hazard."""
+def _log_decision(rec) -> None:
+    """Append one per-frame decision to the decisions log (best effort)."""
     try:
-        event = client.classify(jpeg_bytes, zone)
-    except Exception as exc:  # retry once, then skip
+        config.ensure_dirs()
+        with open(config.DECISIONS_LOG, "a") as f:
+            f.write(json.dumps(rec) + "\n")
+    except OSError:
+        pass
+
+
+def _handle(conn, client, jpeg_bytes, clip_name, zone, log,
+            voter=None, second_look=False, do_blur=True,
+            enhance=False, locate=False, zone_box=None, verify=None):
+    """Classify one frame and store a new event if it is a real, confirmed, non-duplicate
+    hazard. Every frame is observed by the voter (when on) and logged to the decisions log.
+    """
+    vision_jpeg = jpeg_bytes
+    if enhance and jpeg_bytes:
+        vision_jpeg = enhance_mod.enhance_jpeg(jpeg_bytes, zone_box)
+
+    prompt = rules.LOCATE_PROMPT if locate else None
+    try:
+        event = client.classify(vision_jpeg, zone, prompt=prompt)
+    except Exception as exc:  # retry once, then treat as a miss
         try:
-            event = client.classify(jpeg_bytes, zone)
+            event = client.classify(vision_jpeg, zone, prompt=prompt)
         except Exception:
             log(f"skip: vision error: {exc}")
+            if voter is not None:
+                voter.observe(zone, False)
             return None
-    if not rules.validate_event(event):
-        log(f"skip: malformed event: {event}")
-        return None
-    if event["hazard"] == "none":
-        return None
-    if float(event["confidence"]) < config.MIN_CONFIDENCE:
-        log(f"skip: low confidence {event['confidence']}")
+
+    valid = rules.validate_event(event)
+    present = (valid and event.get("hazard") not in (None, "none")
+               and float(event.get("confidence", 0)) >= config.MIN_CONFIDENCE)
+
+    box = event.get("box") if valid else None
+    if present and locate and zone_box and box:
+        if not locate_mod.in_zone(box, zone_box, config.LOCATE_MIN_OVERLAP):
+            log(f"filtered: obstruction not in exit zone {zone}")
+            present = False
+
+    met = True
+    if voter is not None:
+        met = voter.observe(zone, present)
+
+    if not valid:
+        action = "malformed"
+    elif not present:
+        action = "no_hazard"
+    elif not met:
+        action = "voting"
+    else:
+        action = "candidate"
+
+    _log_decision({
+        "ts": store.now_iso(), "zone": zone, "clip": clip_name,
+        "hazard": event.get("hazard") if valid else None,
+        "confidence": event.get("confidence") if valid else None,
+        "box": box, "present": present, "voted": met, "action": action,
+    })
+
+    if not (valid and present and met):
+        if action == "malformed":
+            log(f"skip: malformed event: {event}")
+        elif action == "voting":
+            log(f"vote: holding {event.get('hazard')} in {zone}")
         return None
 
-    if second_look and not _confirm(client, jpeg_bytes, zone, event["hazard"], log):
+    hazard = event["hazard"]
+    if second_look and not _confirm(client, vision_jpeg, zone, hazard, log):
+        return None
+    if verify is not None and not verify(vision_jpeg, zone):
+        log(f"filtered: verifier rejected {hazard} in {zone}")
         return None
 
     when = utc_now()
-    if dedup.is_duplicate(conn, event["hazard"], zone, when):
-        log(f"dup: {event['hazard']} in {zone} already open")
+    if dedup.is_duplicate(conn, hazard, zone, when):
+        log(f"dup: {hazard} in {zone} already open")
         return None
 
     frame_path = _save_frame(jpeg_bytes, clip_name, when, do_blur=do_blur)
-    key = dedup.make_dedup_key(event["hazard"], zone, when, config.DEDUP_WINDOW_MIN)
+    key = dedup.make_dedup_key(hazard, zone, when, config.DEDUP_WINDOW_MIN)
     row = store.insert_event(
-        conn, clip=clip_name, hazard=event["hazard"], zone=zone,
+        conn, clip=clip_name, hazard=hazard, zone=zone,
         confidence=event["confidence"], explanation=event.get("explanation", ""),
-        frame_path=frame_path, dedup_key=key,
+        frame_path=frame_path, dedup_key=key, box=box,
     )
-    log(f"event {row['id']}: {row['hazard']} in {zone} ({row['confidence']})")
+    log(f"event {row['id']}: {hazard} in {zone} ({row['confidence']})")
     return row
 
 
 def run(clip, zone=None, fake=False, no_frames=False, interval=None,
         stream=False, max_frames=None, motion_gate=False, second_look=False,
-        do_blur=True):
+        do_blur=True, vote=None, enhance=None, locate=None, verifier_url=None):
     conn = store.connect()
     client = vision.get_vision(fake)
     zone = zones.resolve_zone(clip, override=zone)
+    zone_box = zones.exit_box(zone)
     gate = motion.MotionGate() if motion_gate else None
+
+    # Accuracy switches: explicit arg wins, else the environment default.
+    enhance = config.ENHANCE if enhance is None else enhance
+    locate = config.LOCATE if locate is None else locate
+    spec = voting.parse_vote(config.VOTE_SPEC if vote is None else vote)
+    voter = voting.Voter(*spec) if spec else None
+    vurl = config.VERIFIER_URL if verifier_url is None else verifier_url
+    verify = verifier.CosmosVerifier(vurl).confirms if vurl else None
 
     def log(msg):
         print(msg, file=sys.stderr)
 
+    kw = dict(voter=voter, second_look=second_look, do_blur=do_blur,
+              enhance=enhance, locate=locate, zone_box=zone_box, verify=verify)
+
     created = []
     if no_frames:
         # Logic smoke test: drive the loop from the fake client with no video.
-        row = _handle(conn, client, None, clip or "fake_cam", zone, log,
-                      second_look=second_look, do_blur=do_blur)
+        row = _handle(conn, client, None, clip or "fake_cam", zone, log, **kw)
         if row:
             created.append(row)
     else:
@@ -111,8 +178,7 @@ def run(clip, zone=None, fake=False, no_frames=False, interval=None,
                                       max_frames=max_frames):
             if gate is not None and not gate.passed(jpeg):
                 continue
-            row = _handle(conn, client, jpeg, clip, zone, log,
-                          second_look=second_look, do_blur=do_blur)
+            row = _handle(conn, client, jpeg, clip, zone, log, **kw)
             if row:
                 created.append(row)
     print(json.dumps(created))
@@ -138,11 +204,21 @@ def main(argv=None):
                    help="confirm a candidate with a stricter re-ask before storing it")
     p.add_argument("--no-blur", action="store_true",
                    help="do not blur faces on the saved frame (use only on clips with no people)")
+    p.add_argument("--vote", default=None,
+                   help="temporal voting, for example 3/4 (seen in 3 of the last 4 samples)")
+    p.add_argument("--enhance", action="store_true",
+                   help="crop to the exit zone, upscale and CLAHE the frame before the model")
+    p.add_argument("--locate", action="store_true",
+                   help="ask for the obstruction box and require it to overlap the exit zone")
+    p.add_argument("--verifier-url", default=None,
+                   help="second verifier (Cosmos) OpenAI-compatible URL, local host only")
     args = p.parse_args(argv)
     run(args.clip, args.zone, fake=args.fake_vision, no_frames=args.no_frames,
         interval=args.interval, stream=args.stream, max_frames=args.max_frames,
         motion_gate=args.motion_gate, second_look=args.second_look,
-        do_blur=not args.no_blur)
+        do_blur=not args.no_blur, vote=args.vote,
+        enhance=True if args.enhance else None,
+        locate=True if args.locate else None, verifier_url=args.verifier_url)
 
 
 if __name__ == "__main__":

@@ -37,6 +37,24 @@ MOTION_THRESHOLD = float(os.environ.get("SSW_MOTION_THRESHOLD", "3.0"))
 # show a face (a hard team rule). It is a no-op when no face is detected.
 BLUR_FACES = os.environ.get("SSW_BLUR", "1") not in ("0", "false", "False", "")
 
+# --- Accuracy switches (post-lock), each off by default and measured on and off ---
+# Temporal voting, for example "3/4" (hazard must be seen in 3 of the last 4 samples).
+VOTE_SPEC = os.environ.get("SSW_VOTE", "")
+# Enhance the frame sent to the model: exit-zone crop, 2x upscale, CLAHE.
+ENHANCE = os.environ.get("SSW_ENHANCE", "0") not in ("0", "false", "False", "")
+# Ask the model for the obstruction box and require it to overlap the exit zone.
+LOCATE = os.environ.get("SSW_LOCATE", "0") not in ("0", "false", "False", "")
+# Minimum fraction of the obstruction box that must fall inside the exit zone.
+LOCATE_MIN_OVERLAP = float(os.environ.get("SSW_LOCATE_MIN_OVERLAP", "0.1"))
+# Second verifier model (NVIDIA Cosmos) OpenAI-compatible URL, for example
+# http://127.0.0.1:8001/v1. Empty = off. Must be a local host.
+VERIFIER_URL = os.environ.get("SSW_VERIFIER_URL", "")
+VERIFIER_MODEL = os.environ.get("SSW_VERIFIER_MODEL", "nvidia/Cosmos-Reason2-2B")
+# Zone config with exit boxes, for example {"exit_a": {"exit_box": [x, y, w, h]}}.
+ZONES_FILE = Path(os.environ.get("SSW_ZONES", REPO_ROOT / "watcher" / "zones.json"))
+# Per-frame decision log for debugging and the eval.
+DECISIONS_LOG = Path(os.environ.get("SSW_DECISIONS", DATA_DIR / "decisions.jsonl"))
+
 
 def ensure_dirs() -> None:
     FRAMES_DIR.mkdir(parents=True, exist_ok=True)
