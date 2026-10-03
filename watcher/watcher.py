@@ -17,17 +17,20 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from . import blur, config, dedup, motion, resolve, rules, store, vision, zones
+from . import annotate, blur, config, dedup, motion, resolve, rules, store, vision, zones
 from . import enhance as enhance_mod
 from . import locate as locate_mod
 from . import verifier, voting
 from .sampler import now_local
 
 
-def _save_frame(jpeg_bytes, clip_name, when, do_blur=True) -> str:
+def _save_frame(jpeg_bytes, clip_name, when, do_blur=True, box=None, hazard=None) -> str:
     config.ensure_dirs()
     if do_blur and jpeg_bytes:
         jpeg_bytes = blur.blur_jpeg(jpeg_bytes)
+    # Annotate after blur so the drawn frame is already privacy safe; no box means no drawing.
+    if config.ANNOTATE and jpeg_bytes and box:
+        jpeg_bytes = annotate.annotate_jpeg(jpeg_bytes, box, annotate.label_for(hazard))
     stamp = when.strftime("%Y%m%dT%H%M%S")
     safe = Path(clip_name).stem or "cam"
     out = config.FRAMES_DIR / f"{safe}_{stamp}_{abs(hash(when)) % 10000}.jpg"
@@ -167,7 +170,8 @@ def _handle(conn, client, jpeg_bytes, clip_name, zone, log,
         log(f"dup: {hazard} in {zone} already open")
         return None
 
-    frame_path = _save_frame(jpeg_bytes, clip_name, when, do_blur=do_blur)
+    frame_path = _save_frame(jpeg_bytes, clip_name, when, do_blur=do_blur,
+                             box=box, hazard=hazard)
     key = dedup.make_dedup_key(hazard, zone, when, config.DEDUP_WINDOW_MIN)
     row = store.insert_event(
         conn, clip=clip_name, hazard=hazard, zone=zone,
@@ -253,7 +257,11 @@ def main(argv=None):
                    help="second verifier (Cosmos) OpenAI-compatible URL, local host only")
     p.add_argument("--no-auto-resolve", action="store_true",
                    help="do not auto-resolve events after two clear checks in a row")
+    p.add_argument("--no-annotate", action="store_true",
+                   help="do not draw the box and label on the saved hazard frame")
     args = p.parse_args(argv)
+    if args.no_annotate:
+        config.ANNOTATE = False
     run(args.clip, args.zone, fake=args.fake_vision, no_frames=args.no_frames,
         interval=args.interval, stream=args.stream, max_frames=args.max_frames,
         motion_gate=args.motion_gate, second_look=args.second_look,

@@ -50,6 +50,12 @@ Each command prints JSON only. `ssw pending` and `ssw pending-resolved` print th
 ./watcher/ssw mark-resolved-announced <id> # call after the agent posts the all-clear
 ```
 
+## Annotated evidence frame
+After blur, the saved hazard frame has the obstruction box and a label
+(`BLOCKED EXIT - 29 CFR 1910.37(a)(3)`) drawn on it, so an alert or screenshot reads at a
+glance. A frame with no box (a clear or resolution frame) is left plain. On by default;
+`--no-annotate` or `SSW_ANNOTATE=0` to disable.
+
 ## Auto-resolution (closes the loop)
 After two clear checks in a row in a zone (exit visible and not blocked), the watcher marks
 the open events there `resolved` with `resolved_ts`, a `resolved_frame_path` and a measured

@@ -62,6 +62,10 @@ DECISIONS_LOG = Path(os.environ.get("SSW_DECISIONS", DATA_DIR / "decisions.jsonl
 AUTO_RESOLVE = os.environ.get("SSW_AUTO_RESOLVE", "1") not in ("0", "false", "False", "")
 CLEARS_TO_RESOLVE = int(os.environ.get("SSW_CLEARS_TO_RESOLVE", "2"))
 
+# Draw the box and label on the saved hazard frame (after blur). On by default; a frame with
+# no box is left plain.
+ANNOTATE = os.environ.get("SSW_ANNOTATE", "1") not in ("0", "false", "False", "")
+
 # Local timezone for stored timestamps. Inside the vLLM container there is no system TZ, so
 # astimezone() falls back to UTC; use an explicit zone instead. SSW_TZ wins, then TZ, then
 # a sensible venue default.
