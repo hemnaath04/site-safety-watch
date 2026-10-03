@@ -17,6 +17,9 @@ const USAGE = [
   "       node ssw.mjs posted <id>",
   "       node ssw.mjs dispose <id> approved|false_alarm --by <slack_user_id>",
   "       node ssw.mjs post-new",
+  "       node ssw.mjs stats [--hours N]",
+  "       node ssw.mjs digest [--hours N]",
+  "       node ssw.mjs escalate [--after-min N]",
 ].join("\n");
 
 function usage(msg) {
@@ -45,6 +48,20 @@ function baseUrl() {
 function checkId(id) {
   if (id === undefined || !/^\d+$/.test(id)) usage(`event id must be digits only, got ${JSON.stringify(id ?? "")}`);
   return id;
+}
+
+// Parses an optional single "<flag> N" pair; N must be a positive integer.
+function optionalCount(cmd, rest, flag) {
+  if (rest.length === 0) return null;
+  if (rest.length !== 2 || rest[0] !== flag) usage(`${cmd} takes only ${flag} N`);
+  if (!/^[1-9]\d{0,5}$/.test(rest[1])) usage(`${flag} must be a positive integer, got ${JSON.stringify(rest[1])}`);
+  return rest[1];
+}
+
+async function printText(path) {
+  const data = await call("GET", path);
+  if (typeof data?.text !== "string") fail(`API ${path.split("?")[0]} response has no text field`);
+  process.stdout.write(data.text + "\n");
 }
 
 async function call(method, path, body) {
@@ -133,6 +150,19 @@ async function main(argv) {
         await call("POST", `/events/${id}/posted`);
       }
       process.stdout.write(texts.join("\n\n") + "\n");
+      return;
+    }
+    case "stats":
+    case "digest": {
+      const hours = optionalCount(cmd, rest, "--hours");
+      const path = `/${cmd}` + (hours ? `?hours=${hours}` : "");
+      if (cmd === "stats") print(await call("GET", path));
+      else await printText(path);
+      return;
+    }
+    case "escalate": {
+      const afterMin = optionalCount(cmd, rest, "--after-min");
+      await printText("/escalations" + (afterMin ? `?after_min=${afterMin}` : ""));
       return;
     }
     case undefined:
