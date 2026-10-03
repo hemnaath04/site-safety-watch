@@ -41,7 +41,10 @@
           <button type="button" data-view="isometric" aria-pressed="true">Isometric</button>
           <button type="button" data-view="top" aria-pressed="false">Top</button>
           <button type="button" data-view="door" aria-pressed="false">Door</button>
+          <span class="twin-toolbar-sep" aria-hidden="true"></span>
+          <button type="button" id="twin-scan-toggle" aria-pressed="false" hidden>Room scan</button>
         </div>
+        <p class="twin-scan-note" id="twin-scan-note" role="status" hidden></p>
 
         <div class="twin-banner" id="twin-banner" role="alert" hidden>
           <span>Exit blocked</span>

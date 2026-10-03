@@ -81,6 +81,24 @@ body:has(.metrics-strip:not([hidden])) .twin-shell { height: calc(100vh - 149px)
 }
 
 .twin-toolbar button:hover { border-color: var(--muted); }
+.twin-toolbar button:disabled { opacity: .5; cursor: progress; }
+.twin-toolbar-sep { width: 1px; margin: 4px 4px; background: var(--rule-strong); }
+.twin-toolbar-sep:has(+ button[hidden]) { display: none; }
+
+.twin-scan-note {
+  position: absolute;
+  top: 60px;
+  left: 14px;
+  z-index: 3;
+  max-width: min(46ch, calc(100% - 28px));
+  padding: 6px 10px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  background: rgba(14, 19, 25, .88);
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 700;
+}
 .twin-toolbar button[aria-pressed="true"] { background: var(--text); color: var(--ink); border-color: var(--text); }
 
 .twin-banner {

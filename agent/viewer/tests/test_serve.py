@@ -232,6 +232,30 @@ class ViewerTest(unittest.TestCase):
         self.assertEqual(self.request("/twin.js")[:2], (200, "text/javascript"))
         self.assertEqual(StubTwinHandler.seen, [])
 
+    def test_room_scan_is_served_from_env_path(self):
+        scan = self.root / "room.glb"
+        scan.write_bytes(b"glTF\x02\x00\x00\x00fake-scan" * 10000)
+        with patch.dict(os.environ, {"TWIN_ROOM_GLB": str(scan)}):
+            status, content_type, body = self.request("/room.glb")
+        self.assertEqual((status, content_type), (200, "model/gltf-binary"))
+        self.assertEqual(body, scan.read_bytes())
+
+    def test_room_scan_is_404_when_unset_or_missing(self):
+        with patch.dict(os.environ, {}):
+            os.environ.pop("TWIN_ROOM_GLB", None)
+            self.assertEqual(self.request("/room.glb")[0], 404)
+        with patch.dict(os.environ, {"TWIN_ROOM_GLB": str(self.root / "missing.glb")}):
+            self.assertEqual(self.request("/room.glb")[0], 404)
+        with patch.dict(os.environ, {"TWIN_ROOM_GLB": str(self.root)}):
+            self.assertEqual(self.request("/room.glb")[0], 404)
+
+    def test_csp_allows_blob_images_for_embedded_scan_textures(self):
+        with urllib.request.urlopen(f"http://127.0.0.1:{self.viewer_port}/twin.html", timeout=5) as response:
+            csp = response.headers["Content-Security-Policy"]
+        self.assertIn("img-src 'self' data: blob:", csp)
+        self.assertIn("connect-src 'self' blob:", csp)
+        self.assertIn("script-src 'self';", csp)
+
     def test_frame_is_served_inside_root(self):
         status, content_type, body = self.request("/frames/1")
         self.assertEqual(status, 200)

@@ -60,6 +60,8 @@ class Handler(BaseHTTPRequestHandler):
             self._serve_numbers()
         elif path == "/clip":
             self._serve_clip()
+        elif path == "/room.glb":
+            self._serve_room_scan()
         elif path.startswith("/frames/"):
             self._serve_frame(path.removeprefix("/frames/"))
         elif path == "/scene3d" or path.startswith("/scene3d/"):
@@ -96,7 +98,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; media-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'")
+        self.send_header("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob:; media-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' blob:; frame-ancestors 'none'")
         if length is not None:
             self.send_header("Content-Length", str(length))
 
@@ -226,6 +228,26 @@ class Handler(BaseHTTPRequestHandler):
                     break
                 self.wfile.write(chunk)
                 remaining -= len(chunk)
+
+    def _serve_room_scan(self):
+        configured = os.environ.get("TWIN_ROOM_GLB")
+        if not configured:
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        scan = Path(configured).expanduser().resolve()
+        if not scan.is_file():
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        try:
+            source = scan.open("rb")
+        except OSError:
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        with source:
+            self._headers(HTTPStatus.OK, "model/gltf-binary", scan.stat().st_size)
+            self.end_headers()
+            while chunk := source.read(BUFFER_SIZE):
+                self.wfile.write(chunk)
 
     def _serve_file(self, path: Path, content_type: str):
         try:
