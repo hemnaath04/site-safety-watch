@@ -307,3 +307,15 @@ body[data-mock="1"] .twin-mock-tag { display: block; }
 .twin-page .twin-hud, .twin-page .twin-scan-credit { border-radius: 0; }
 /* The model toggle is a switch, not a view: outline it so only the active view is filled. */
 .twin-page #twin-scan-toggle[aria-pressed="true"] { color: var(--safety); background: transparent; box-shadow: inset 0 -2px 0 var(--safety); }
+
+/* Embed mode (?embed=1): only the 3D stage, for the console's spatial panel. */
+.twin-embed .skip-link, .twin-embed .masthead, .twin-embed .twin-cameras, .twin-embed .footer-bar,
+.twin-embed .twin-scan-credit, .twin-embed #twin-scan-toggle, .twin-embed .twin-toolbar-sep { display: none !important; }
+.twin-embed .twin-page { min-height: 0; height: 100vh; }
+.twin-embed .twin-shell { grid-template-columns: 1fr; height: 100vh; min-height: 0; }
+.twin-embed .twin-main { padding: 0; border-right: 0; }
+.twin-embed .twin-stage { min-height: 0; border: 0; }
+.twin-embed .twin-toolbar { top: 8px; left: 8px; max-width: calc(100% - 16px); }
+.twin-embed .twin-toolbar button { min-height: 26px; padding: 4px 8px; font-size: .62rem; }
+.twin-embed .twin-hud { transform: scale(.72); transform-origin: bottom left; }
+.twin-embed .twin-banner { transform: scale(.8); transform-origin: top right; }

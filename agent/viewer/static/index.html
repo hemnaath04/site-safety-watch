@@ -7,7 +7,6 @@
   <title>Site Safety Watch</title>
   <link rel="stylesheet" href="/app.css">
   <script src="/app.js" defer></script>
-  <script type="module" src="/scene3d.js"></script>
 </head>
 <body>
   <!--
@@ -80,24 +79,18 @@
       <section class="scene3d-panel" aria-labelledby="scene3d-title">
         <div class="module-heading">
           <div>
-            <h2 id="scene3d-title">Spatial reconstruction</h2>
-            <p>Secondary evidence</p>
+            <h2 id="scene3d-title">Live 3D twin</h2>
+            <p>Hall model, live state from the cameras</p>
           </div>
-          <span class="module-state scene3d-state" id="scene3d-state" data-state="checking">Checking</span>
+          <a class="module-state scene3d-state twin-open" href="/twin.html" data-state="online">Full view</a>
         </div>
 
-        <div class="scene3d-stage" id="scene3d-stage">
-          <canvas id="scene3d-canvas" role="img" aria-label="Interactive three-dimensional point cloud of the monitored exit"></canvas>
-          <div class="scene3d-empty" id="scene3d-empty" role="status">
-            <p>Waiting for local depth.</p>
-            <span>The spatial view appears when the scene service reports a frame.</span>
-          </div>
-          <div class="scene3d-orbit-hint" id="scene3d-orbit-hint" hidden>Drag to orbit</div>
+        <div class="scene3d-stage twin-embed-stage">
+          <iframe src="/twin.html?view=cam:cam_left&amp;embed=1" title="Live 3D twin of the monitored hall" loading="eager"></iframe>
         </div>
 
         <div class="scene3d-caption">
-          <span>Depth estimated from one camera on the GB10</span>
-          <strong id="scene3d-depth" hidden></strong>
+          <span>Site model built on the GB10 from a one-time LiDAR scan and the camera footage</span>
         </div>
       </section>
 

@@ -722,3 +722,8 @@ h1 {
     scroll-behavior: auto !important;
   }
 }
+
+/* The spatial panel embeds the live 3D twin (twin.html in embed mode). */
+.twin-embed-stage { cursor: default; }
+.twin-embed-stage iframe { width: 100%; height: 100%; display: block; border: 0; background: var(--black); }
+.twin-open { text-decoration: none; }
