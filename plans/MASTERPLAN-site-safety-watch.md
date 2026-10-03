@@ -269,3 +269,47 @@ Checked against the committee slide photographed at 11:30 on the event day:
 **Required compliance evidence before submission:** one timestamped local-inference log, one
 OpenClaw-triggered Slack event with disposition, repository history showing day-of product
 work, the submitted demo video, and the submitted public slide link.
+
+## 15. Changes after the lock (captain, 12:20 to 13:15)
+
+The completion rule still holds: the blocked-exit loop (clip, local vision, event, Slack, human
+decision, stored record) comes first. Everything below is either done or a stretch with a drop
+deadline of 16:00.
+
+1. **Stack in use:** NemoClaw sandbox `safety` running OpenClaw inside OpenShell, inference
+   through `inference.local` to our vLLM. Gate 1 passed at 12:38 (bot answers in #safety).
+   Box wiring: `agent/box/README.md`.
+2. **Alerts are posted by code, not the model.** An OpenClaw cron command job runs
+   `ssw.mjs post-new` every minute. Measured: the first version, a full agent turn per check,
+   used 135,359 input + 3,963 output tokens and 63 s per run; the command job posts the same
+   alert in 0.51 s with zero model tokens. The model is kept for reading frames, recording
+   decisions and answering people.
+3. **Accuracy on low-quality CCTV** (watcher switches, each measured on and off):
+   `SSW_ENHANCE` (exit-zone crop, 2x upscale, CLAHE), `SSW_LOCATE` (Qwen3.6 returns the
+   obstruction box; code checks overlap with the exit zone), `SSW_VOTE=3/4` (seen in 3 of the
+   last 4 samples), `SSW_VERIFIER_URL` (NVIDIA **Cosmos-Reason2-2B** on port 8001 as a second
+   opinion on the last 4 frames). Eval adds CCTV-angle, dim and degraded 360p copies of every
+   clip. Cosmos is under the NVIDIA Open Model License (commercial use allowed); the console and
+   README must say "Built on NVIDIA Cosmos". `nvidia/LocateAnything-3B` is not used
+   (non-commercial).
+4. **3D room view** (stretch, drop at 16:00 if not solid): `agent/scene3d/` runs
+   Depth-Anything-V2-Small (Apache-2.0) on the GB10 GPU and returns a colored point cloud with
+   the obstruction lit up; the console renders it with vendored three.js. Measured: 13.7 to
+   17.2 ms of GPU depth per frame, 68,480 points, 48 to 68 ms per request. Depth is relative and
+   from one camera; the 70 degree field of view is an assumption shown in the data.
+5. **Frontend:** the console in `agent/viewer/` is built by Hemnaath with Codex (PR #8).
+6. **Contract addition (agreed):** events get a nullable `box` = `[x1, y1, x2, y2]` in pixels of
+   `frame_path`, written by the watcher, used by the console and the 3D view.
+7. **Demo beats add:** the 3D room with the blocked exit lit up, and the line "three vision
+   models on one GB10: Qwen3.6 reads the scene, Cosmos-Reason2 double-checks it, Depth Anything
+   builds the 3D view".
+
+Measured on our GB10 so far (all from logged runs today):
+
+| What | Value |
+|---|---|
+| Qwen3.6, one 960x640 frame plus question | 1.03 s warm, 653 prompt + 69 output tokens |
+| vLLM start to ready | about 3 min (weights 17.9 s) |
+| Alert check as an agent turn vs as a command job | 63 s and 139,322 tokens vs 0.51 s and 0 tokens |
+| Depth Anything V2 Small, fp16, cuDNN off | 13.6 ms per 518x784 frame |
+| Models and images copied from SSD and verified | 91 GB in about 3 min |
