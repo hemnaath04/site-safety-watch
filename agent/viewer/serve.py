@@ -98,7 +98,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob:; media-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' blob:; frame-ancestors 'none'")
+        self.send_header("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob:; media-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' blob:; frame-ancestors 'self'")
         if length is not None:
             self.send_header("Content-Length", str(length))
 
