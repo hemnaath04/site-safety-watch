@@ -8,7 +8,11 @@ import {
   doorStatus,
   exitZonePolygon,
   floorToScene,
+  floorPointToThree,
   formatFps,
+  meshTransform,
+  normalizeMesh,
+  transformMeshPoint,
   gridLines,
   normalizeConfig,
   normalizeState,
@@ -19,6 +23,7 @@ import {
   wallPieces,
 } from "../static/twin.js";
 import { MOCK_CONFIG, cameraSees, createMockTwin, mockState } from "../static/twin-mock.js";
+import * as THREE from "../static/vendor/three.module.min.js";
 
 const ROOM = { width_m: 8, depth_m: 6, walls: [[0, 0], [8, 0], [8, 6], [0, 6]], doors: [{ id: "exit_a", p1: [3.4, 0], p2: [4.4, 0], zone: "exit_a" }] };
 const close = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} != ${b}`);
@@ -230,4 +235,72 @@ test("mock clock offset starts the loop later", async () => {
   assert.equal((await twin.get("/twin/state")).doors[0].blocked, true);
   const plain = createMockTwin(() => 0, Number.NaN);
   assert.equal((await plain.get("/twin/state")).doors[0].blocked, false);
+});
+
+const nearArr = (a, b, eps = 1e-9) => a.forEach((v, i) => close(v, b[i], eps));
+
+test("floor coords map to three.js: y into the room is -z, z up is +y", () => {
+  assert.deepEqual(floorPointToThree([1, 2, 3]), [1, 3, -2]);
+  assert.deepEqual(floorPointToThree([4, 5]), [4, 0, -5]);
+});
+
+test("normalizeMesh applies defaults and refuses other hosts", () => {
+  assert.deepEqual(normalizeMesh({ url: "/room.glb" }), { url: "/room.glb", scale: 1, rotation_deg: [0, 0, 0], offset: [0, 0, 0], opacity: 1 });
+  assert.equal(normalizeMesh(null), null);
+  assert.equal(normalizeMesh({ url: "https://example.com/room.glb" }), null);
+  assert.equal(normalizeMesh({ url: "//example.com/room.glb" }), null);
+  assert.equal(normalizeMesh({ url: "room.glb" }), null);
+  const m = normalizeMesh({ url: "/a.glb", scale: -2, rotation_deg: [0, "x", 0], offset: [1, 2], opacity: 7 });
+  assert.equal(m.scale, 1);
+  assert.deepEqual(m.rotation_deg, [0, 0, 0]);
+  assert.deepEqual(m.offset, [0, 0, 0]);
+  assert.equal(m.opacity, 1);
+  assert.deepEqual(normalizeMesh({ scale: [1, 2, 3] }, "/b.glb").scale, [1, 2, 3]);
+  assert.equal(normalizeMesh({ url: "/a.glb", scale: 2 }, "/b.glb").url, "/b.glb");
+  assert.equal(normalizeMesh({ url: "/a.glb", scale: 2 }, "/b.glb").scale, 2);
+});
+
+test("config keeps a valid room mesh and drops a bad one", () => {
+  const cfg = normalizeConfig({ ...MOCK_CONFIG, room: { ...MOCK_CONFIG.room, mesh: { url: "/room.glb", scale: 1, rotation_deg: [0, 0, 90], offset: [0.5, 0, 0], opacity: 0.8 } } });
+  assert.deepEqual(cfg.room.mesh.rotation_deg, [0, 0, 90]);
+  assert.equal(normalizeConfig(MOCK_CONFIG).room.mesh, null);
+  assert.equal(normalizeConfig({ ...MOCK_CONFIG, room: { ...MOCK_CONFIG.room, mesh: { url: "http://x/y.glb" } } }).room.mesh, null);
+});
+
+test("mesh offset is in floor meters", () => {
+  const mesh = normalizeMesh({ url: "/r.glb", offset: [1, 2, 0.5] });
+  assert.deepEqual(meshTransform(mesh).position, [1, 0.5, -2]);
+  nearArr(transformMeshPoint([0, 0, 0], mesh), [1, 0.5, -2]);
+});
+
+test("yaw about floor up (rotation_deg z = 90) turns floor +x into floor +y", () => {
+  const mesh = normalizeMesh({ url: "/r.glb", rotation_deg: [0, 0, 90] });
+  // three +x is floor +x; floor +y is three -z
+  nearArr(transformMeshPoint([1, 0, 0], mesh), floorPointToThree([0, 1, 0]));
+});
+
+test("scale multiplies before rotation and offset", () => {
+  const mesh = normalizeMesh({ url: "/r.glb", scale: 2, rotation_deg: [0, 0, 90], offset: [1, 0, 0] });
+  nearArr(transformMeshPoint([1, 0, 0], mesh), floorPointToThree([1, 2, 0]));
+});
+
+test("transform matches three.js Object3D for arbitrary settings", () => {
+  const cases = [
+    { scale: 1.5, rotation_deg: [10, -25, 40], offset: [0.3, 1.2, -0.1] },
+    { scale: [1, 0.5, 2], rotation_deg: [-90, 0, 180], offset: [2, 3, 0] },
+    { scale: 0.01, rotation_deg: [0, 45, 0], offset: [0, 0, 0] },
+  ];
+  for (const raw of cases) {
+    const mesh = normalizeMesh({ url: "/r.glb", ...raw });
+    const t = meshTransform(mesh);
+    const obj = new THREE.Object3D();
+    obj.scale.set(...t.scale);
+    obj.rotation.set(t.rotation.x, t.rotation.y, t.rotation.z, t.rotation.order);
+    obj.position.set(...t.position);
+    obj.updateMatrixWorld(true);
+    for (const p of [[1, 0, 0], [0, 1, 0], [0, 0, 1], [0.7, -1.3, 2.2]]) {
+      const v = new THREE.Vector3(...p).applyMatrix4(obj.matrixWorld);
+      nearArr(transformMeshPoint(p, mesh), [v.x, v.y, v.z], 1e-9);
+    }
+  }
 });

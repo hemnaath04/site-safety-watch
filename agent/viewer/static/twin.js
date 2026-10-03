@@ -10,6 +10,9 @@ export const OFFLINE_AFTER_FAILURES = 3;
 export const WALL_HEIGHT_M = 2.6;
 export const OBSTRUCTION_HEIGHT_M = 1;
 export const EXIT_ZONE_DEPTH_M = 1.2;
+const GRID_OPACITY = 0.7;
+const GRID_OPACITY_SCAN = 0.22;
+const OVERLAY_ORDER = 10;
 
 const finite = (v) => typeof v === "number" && Number.isFinite(v);
 const isPoint = (p) => Array.isArray(p) && p.length >= 2 && finite(p[0]) && finite(p[1]);
@@ -166,7 +169,7 @@ export function normalizeConfig(raw) {
     ? raw.cameras.filter((c) => c && isId(c.id) && c.pose && finite(c.pose.x) && finite(c.pose.y) && finite(c.pose.yaw_deg))
       .map((c) => ({ id: String(c.id), pose: { x: c.pose.x, y: c.pose.y, yaw_deg: c.pose.yaw_deg }, door_id: c.door_id ?? null }))
     : [];
-  return { room: { width_m: room.width_m, depth_m: room.depth_m, walls, doors }, cameras };
+  return { room: { width_m: room.width_m, depth_m: room.depth_m, walls, doors, mesh: normalizeMesh(room.mesh) }, cameras };
 }
 
 export function normalizeState(raw) {
@@ -225,6 +228,58 @@ export function viewPose(name, config) {
   return { position: [c.x + r * 0.62, r * 0.85, c.z - r * 0.95], target: [c.x, 0, c.z + d * 0.08] };
 }
 
+const MESH_DEFAULTS = Object.freeze({ scale: 1, rotation_deg: [0, 0, 0], offset: [0, 0, 0], opacity: 1 });
+
+const isTriple = (v) => Array.isArray(v) && v.length === 3 && v.every(finite);
+
+// Room scan settings from config, optionally overridden by ?mesh=<path>. Same-origin paths only.
+export function normalizeMesh(raw, urlOverride = null) {
+  const base = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  const url = urlOverride ?? base.url;
+  if (typeof url !== "string" || !url.startsWith("/") || url.startsWith("//") || url.includes("\\")) return null;
+  let scale = MESH_DEFAULTS.scale;
+  if (finite(base.scale) && base.scale > 0) scale = base.scale;
+  else if (isTriple(base.scale) && base.scale.every((s) => s > 0)) scale = [...base.scale];
+  const opacity = finite(base.opacity) ? Math.min(1, Math.max(0.05, base.opacity)) : MESH_DEFAULTS.opacity;
+  return {
+    url,
+    scale,
+    rotation_deg: isTriple(base.rotation_deg) ? [...base.rotation_deg] : [...MESH_DEFAULTS.rotation_deg],
+    offset: isTriple(base.offset) ? [...base.offset] : [...MESH_DEFAULTS.offset],
+    opacity,
+  };
+}
+
+// Floor (x right, y into the room, z up) to three.js (x, z, -y).
+export function floorPointToThree([x, y, z = 0]) {
+  return [x, z, -y];
+}
+
+// Object transform for the scan. rotation_deg is intrinsic X, Y, Z about the floor axes;
+// floor y is three -z and floor z is three +y, so it becomes three Euler order XZY.
+export function meshTransform(mesh) {
+  const rad = (d) => (d * Math.PI) / 180;
+  const [rx, ry, rz] = mesh.rotation_deg;
+  const s = Array.isArray(mesh.scale) ? mesh.scale : [mesh.scale, mesh.scale, mesh.scale];
+  return {
+    position: floorPointToThree(mesh.offset),
+    rotation: { x: rad(rx), y: rad(rz), z: -rad(ry), order: "XZY" },
+    scale: [...s],
+  };
+}
+
+// Applies meshTransform to a point given in the scan's own three.js coordinates.
+export function transformMeshPoint(point, mesh) {
+  const t = meshTransform(mesh);
+  let [x, y, z] = point.map((v, i) => v * t.scale[i]);
+  const { x: ax, y: ay, z: az } = t.rotation;
+  // XZY order: v' = Rx * Rz * Ry * v, so Ry first, then Rz, then Rx.
+  [x, z] = [x * Math.cos(ay) + z * Math.sin(ay), -x * Math.sin(ay) + z * Math.cos(ay)];
+  [x, y] = [x * Math.cos(az) - y * Math.sin(az), x * Math.sin(az) + y * Math.cos(az)];
+  [y, z] = [y * Math.cos(ax) - z * Math.sin(ax), y * Math.sin(ax) + z * Math.cos(ax)];
+  return [x + t.position[0], y + t.position[1], z + t.position[2]];
+}
+
 export function formatFps(fps) {
   return fps === null || fps === undefined ? "-" : (Math.round(fps * 10) / 10).toFixed(1);
 }
@@ -245,6 +300,7 @@ async function boot() {
   const { OrbitControls } = await import("./vendor/OrbitControls.js");
   const params = new URLSearchParams(window.location.search);
   const mockMode = params.get("mock") === "1";
+  const meshOverride = params.get("mesh");
   const startView = ["isometric", "top", "door"].includes(params.get("view")) ? params.get("view") : "isometric";
   const source = mockMode ? (await import("./twin-mock.js")).createMockTwin(undefined, Number(params.get("at"))) : liveSource();
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -273,6 +329,8 @@ async function boot() {
     statsLabel: document.querySelector("#twin-stats-label"),
     statsList: document.querySelector("#twin-stats-list"),
     views: [...document.querySelectorAll("[data-view]")],
+    scanToggle: document.querySelector("#twin-scan-toggle"),
+    scanNote: document.querySelector("#twin-scan-note"),
   };
 
   if (mockMode) document.body.dataset.mock = "1";
@@ -296,9 +354,12 @@ async function boot() {
   sun.position.set(6, 12, 4);
   scene.add(sun);
 
+  const scanGroup = new THREE.Group();
   const roomGroup = new THREE.Group();
   const peopleGroup = new THREE.Group();
-  scene.add(roomGroup, peopleGroup);
+  scene.add(scanGroup, roomGroup, peopleGroup);
+  let schematic = null;
+  const scan = { mesh: null, status: "none", root: null, on: false };
 
   let config = null;
   let doorViews = new Map();
@@ -316,6 +377,71 @@ async function boot() {
   };
   new ResizeObserver(resize).observe(el.stage);
   resize();
+
+  function setOverlayOrder(object, order) {
+    object.traverse((o) => { o.renderOrder = order; });
+  }
+
+  function setScanNote(text) {
+    el.scanNote.hidden = !text;
+    el.scanNote.textContent = text || "";
+  }
+
+  // Scan on: show the mesh, hide the schematic walls and floor, keep a faint grid.
+  function setScanMode(on) {
+    scan.on = Boolean(on) && scan.status === "ready";
+    scanGroup.visible = scan.on;
+    if (schematic) {
+      schematic.group.visible = !scan.on;
+      schematic.gridMat.opacity = scan.on ? GRID_OPACITY_SCAN : GRID_OPACITY;
+    }
+    el.scanToggle.setAttribute("aria-pressed", String(scan.on));
+  }
+
+  async function loadScan(mesh) {
+    scan.mesh = mesh;
+    el.scanToggle.hidden = false;
+    el.scanToggle.disabled = true;
+    scan.status = "loading";
+    setScanNote("Loading room scan");
+    try {
+      const { GLTFLoader } = await import("./vendor/GLTFLoader.js");
+      const gltf = await new GLTFLoader().loadAsync(mesh.url);
+      const root = gltf.scene;
+      const t = meshTransform(mesh);
+      root.scale.set(...t.scale);
+      root.rotation.set(t.rotation.x, t.rotation.y, t.rotation.z, t.rotation.order);
+      root.position.set(...t.position);
+      root.traverse((o) => {
+        if (!o.isMesh) return;
+        o.renderOrder = 0;
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        for (const m of mats) {
+          if (!m) continue;
+          if (mesh.opacity < 1) {
+            m.transparent = true;
+            m.opacity = mesh.opacity;
+            m.depthWrite = false;
+          }
+        }
+      });
+      scanGroup.clear();
+      scanGroup.add(root);
+      scan.root = root;
+      scan.status = "ready";
+      el.scanToggle.disabled = false;
+      setScanNote("");
+      setScanMode(true);
+    } catch (error) {
+      scan.status = "failed";
+      el.scanToggle.disabled = true;
+      setScanMode(false);
+      setScanNote("Room scan did not load, showing the schematic room.");
+      console.warn("room scan failed", error);
+    }
+  }
+
+  el.scanToggle.addEventListener("click", () => setScanMode(!scan.on));
 
   function setStatus(kind, text) {
     el.state.dataset.state = kind;
@@ -386,12 +512,14 @@ async function boot() {
     cameraViews = new Map();
     const { room } = cfg;
 
+    const schematicGroup = new THREE.Group();
+    roomGroup.add(schematicGroup);
     const floor = flatOnFloor(new THREE.Mesh(
       new THREE.PlaneGeometry(room.width_m, room.depth_m),
       new THREE.MeshStandardMaterial({ color: 0x0e1319, roughness: 0.95 }),
     ));
     floor.position.set(room.width_m / 2, 0, -room.depth_m / 2);
-    roomGroup.add(floor);
+    schematicGroup.add(floor);
 
     const gridVerts = [];
     for (const [[x1, y1], [x2, y2]] of gridLines(room.width_m, room.depth_m, 0.5)) {
@@ -399,7 +527,11 @@ async function boot() {
     }
     const gridGeo = new THREE.BufferGeometry();
     gridGeo.setAttribute("position", new THREE.Float32BufferAttribute(gridVerts, 3));
-    roomGroup.add(new THREE.LineSegments(gridGeo, new THREE.LineBasicMaterial({ color: 0x27313c, transparent: true, opacity: 0.7 })));
+    const gridMat = new THREE.LineBasicMaterial({ color: 0x27313c, transparent: true, opacity: GRID_OPACITY });
+    const grid = new THREE.LineSegments(gridGeo, gridMat);
+    grid.renderOrder = OVERLAY_ORDER;
+    roomGroup.add(grid);
+    schematic = { group: schematicGroup, gridMat };
 
     const wallMat = new THREE.MeshStandardMaterial({ color: RULE, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide });
     const wallEdge = new THREE.LineBasicMaterial({ color: 0x82909f, transparent: true, opacity: 0.55 });
@@ -412,7 +544,7 @@ async function boot() {
       mesh.renderOrder = 2;
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), wallEdge);
       mesh.add(edges);
-      roomGroup.add(mesh);
+      schematicGroup.add(mesh);
     }
 
     for (const door of room.doors) {
@@ -426,13 +558,19 @@ async function boot() {
       panel.position.set(angles.length / 2, 1.05, 0);
       panel.add(new THREE.LineSegments(new THREE.EdgesGeometry(panelGeo), new THREE.LineBasicMaterial({ color: 0x0b0f14 })));
       pivot.add(panel);
+      setOverlayOrder(pivot, OVERLAY_ORDER);
       roomGroup.add(pivot);
 
       const zonePts = exitZonePolygon(door, room);
-      const zoneMat = new THREE.MeshBasicMaterial({ color: RESOLVED, transparent: true, opacity: 0.16, depthWrite: false });
-      const zone = flatOnFloor(new THREE.Mesh(new THREE.ShapeGeometry(floorShape(zonePts)), zoneMat), 0.006);
+      const zoneMat = new THREE.MeshBasicMaterial({
+        color: RESOLVED, transparent: true, opacity: 0.16, depthWrite: false,
+        polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+      });
+      const zone = flatOnFloor(new THREE.Mesh(new THREE.ShapeGeometry(floorShape(zonePts)), zoneMat), 0.012);
       const zoneLineMat = new THREE.LineBasicMaterial({ color: RESOLVED, transparent: true, opacity: 0.9 });
-      const zoneLine = outline(zonePts, zoneLineMat, 0.008);
+      const zoneLine = outline(zonePts, zoneLineMat, 0.014);
+      setOverlayOrder(zone, OVERLAY_ORDER + 1);
+      setOverlayOrder(zoneLine, OVERLAY_ORDER + 1);
       roomGroup.add(zone, zoneLine);
 
       const mid = [(door.p1[0] + door.p2[0]) / 2, (door.p1[1] + door.p2[1]) / 2];
@@ -486,6 +624,7 @@ async function boot() {
     const geo = new THREE.ExtrudeGeometry(floorShape(polygon), { depth: OBSTRUCTION_HEIGHT_M, bevelEnabled: false });
     const mesh = flatOnFloor(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: HAZARD, emissive: HAZARD, emissiveIntensity: 0.35, transparent: true, opacity: 0.82 })));
     mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: 0xffd9cb })));
+    setOverlayOrder(mesh, OVERLAY_ORDER + 2);
     view.obstruction = mesh;
     roomGroup.add(mesh);
   }
@@ -502,6 +641,7 @@ async function boot() {
       new THREE.MeshBasicMaterial({ map: shadowTexture, transparent: true, depthWrite: false }),
     ), 0.01);
     group.add(body, shadow);
+    setOverlayOrder(group, OVERLAY_ORDER + 3);
     peopleGroup.add(group);
     return { group, label: makeLabel(p.id, "person"), target: p, recvAt: performance.now(), disp: { x: p.x, y: p.y }, fresh: true };
   }
@@ -621,6 +761,9 @@ async function boot() {
       if (!cfg) throw new Error("twin config is not valid");
       config = cfg;
       buildRoom(cfg);
+      const mesh = meshOverride ? normalizeMesh(cfg.room.mesh || {}, meshOverride) : cfg.room.mesh;
+      if (mesh) loadScan(mesh);
+      else if (meshOverride) setScanNote("Room scan path is not valid, showing the schematic room.");
       buildCameraList(cfg);
       renderHud(null);
       goToView(startView, true);
