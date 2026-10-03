@@ -209,6 +209,7 @@ function addTimelineItem(label, timestamp, note) {
 
 async function selectEvent(id) {
   state.selectedId = String(id);
+  window.dispatchEvent(new CustomEvent("ssw:event-selected", { detail: { id: state.selectedId } }));
   renderFeed(new Set());
   try {
     const event = await getJson(`/api/events/${encodeURIComponent(id)}`);

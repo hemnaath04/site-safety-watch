@@ -115,8 +115,9 @@ before any supporting copy.
 ## Layout
 
 At desktop recording sizes, the console splits into a wide evidence column and a narrow event
-ledger. The evidence column divides vertically between the dominant camera and selected record.
-At 1100px and below, the ledger follows the evidence column in document order. The 18px shell
+ledger. Camera evidence and interactive depth reconstruction share the top row, while the
+selected record anchors beneath them. At 1100px and below, the ledger follows the evidence
+column in document order. At 700px and below, the camera and depth panels stack. The 18px shell
 rhythm and 14px internal gap keep evidence groups tight while retaining visible separation.
 
 ## Elevation & Depth
@@ -147,6 +148,12 @@ ruled docket: header, evidence body and chronological ledger.
 ### Hazard stamp
 - Uses safety orange with dark text and the largest type on the screen.
 - Contains the hazard name and zone only.
+
+### Depth reconstruction
+- Uses source RGB for ordinary points and safety orange for hazard points.
+- Keeps orbit interaction available while auto-rotation remains slow and motion-aware.
+- Shows the measured GB10 depth time and an explicit single-camera caption.
+- Uses an honest unavailable state when the local scene service is not reporting a frame.
 
 ### Evidence record
 - Divides frame, model observation, stored rule and timeline with one-pixel rules.

@@ -39,6 +39,10 @@ def _api_base() -> str:
     return os.environ.get("SSW_API_URL", "http://127.0.0.1:8100").rstrip("/")
 
 
+def _scene_base() -> str:
+    return os.environ.get("SCENE_URL", "http://127.0.0.1:8300").rstrip("/")
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "ssw-viewer/1"
 
@@ -54,11 +58,19 @@ class Handler(BaseHTTPRequestHandler):
             self._serve_clip()
         elif path.startswith("/frames/"):
             self._serve_frame(path.removeprefix("/frames/"))
+        elif path == "/scene3d" or path.startswith("/scene3d/"):
+            suffix = path.removeprefix("/scene3d") or "/"
+            if ".." in suffix.split("/"):
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            if parsed.query:
+                suffix += "?" + parsed.query
+            self._proxy(_scene_base(), suffix, "scene service unavailable")
         elif path == "/api" or path.startswith("/api/"):
             suffix = path.removeprefix("/api") or "/"
             if parsed.query:
                 suffix += "?" + parsed.query
-            self._proxy(suffix)
+            self._proxy(_api_base(), suffix, "event api unavailable")
         else:
             self._serve_static(path)
 
@@ -95,8 +107,8 @@ class Handler(BaseHTTPRequestHandler):
         mime = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
         self._serve_file(candidate, mime)
 
-    def _proxy(self, suffix: str):
-        request = urllib.request.Request(_api_base() + suffix, method="GET")
+    def _proxy(self, base_url: str, suffix: str, unavailable_message: str):
+        request = urllib.request.Request(base_url + suffix, method="GET")
         try:
             with urllib.request.urlopen(request, timeout=5) as response:
                 body = response.read()
@@ -107,7 +119,7 @@ class Handler(BaseHTTPRequestHandler):
             content_type = exc.headers.get_content_type() if exc.headers else "application/json"
             self._send_bytes(exc.code, body, content_type)
         except (urllib.error.URLError, TimeoutError, OSError):
-            self._send_json_error(HTTPStatus.BAD_GATEWAY, "event api unavailable")
+            self._send_json_error(HTTPStatus.BAD_GATEWAY, unavailable_message)
 
     def _event(self, event_id: str) -> dict | None:
         request = urllib.request.Request(f"{_api_base()}/events/{quote(event_id)}", method="GET")

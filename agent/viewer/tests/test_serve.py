@@ -2,6 +2,7 @@ import importlib.util
 import json
 import os
 import socket
+import struct
 import tempfile
 import threading
 import unittest
@@ -59,6 +60,37 @@ class StubApiHandler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
 
+def scene_payload():
+    header = json.dumps({
+        "count": 2,
+        "hfov_deg": 70,
+        "units": "relative",
+        "depth_ms": 42.5,
+        "box": [0.1, 0.2, 0.8, 0.9],
+    }, separators=(",", ":")).encode()
+    xyz = struct.pack("<6f", 0.0, 0.0, 0.0, 1.0, 0.5, -0.5)
+    rgb = bytes([12, 34, 56, 180, 160, 140])
+    flags = bytes([0, 1])
+    return struct.pack("<I", len(header)) + header + xyz + rgb + flags
+
+
+class StubSceneHandler(BaseHTTPRequestHandler):
+    payload = scene_payload()
+
+    def log_message(self, _fmt, *_args):
+        pass
+
+    def do_GET(self):
+        if self.path in ("/scene/live", "/scene/event/1"):
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", str(len(self.payload)))
+            self.end_headers()
+            self.wfile.write(self.payload)
+        else:
+            self.send_error(404)
+
+
 class ViewerTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -73,10 +105,16 @@ class ViewerTest(unittest.TestCase):
         self.api_thread = threading.Thread(target=self.api.serve_forever, daemon=True)
         self.api_thread.start()
 
+        self.scene_port = free_port()
+        self.scene = ThreadingHTTPServer(("127.0.0.1", self.scene_port), StubSceneHandler)
+        self.scene_thread = threading.Thread(target=self.scene.serve_forever, daemon=True)
+        self.scene_thread.start()
+
         self.viewer_port = free_port()
         self.env = patch.dict(os.environ, {
             "SSW_API_URL": f"http://127.0.0.1:{self.api_port}",
             "SSW_FRAMES_ROOT": str(self.root),
+            "SCENE_URL": f"http://127.0.0.1:{self.scene_port}",
         })
         self.env.start()
         self.repo_root = patch.object(viewer, "REPO_ROOT", self.root)
@@ -90,6 +128,8 @@ class ViewerTest(unittest.TestCase):
         self.server.server_close()
         self.api.shutdown()
         self.api.server_close()
+        self.scene.shutdown()
+        self.scene.server_close()
         self.repo_root.stop()
         self.env.stop()
         self.tmp.cleanup()
@@ -113,6 +153,15 @@ class ViewerTest(unittest.TestCase):
         status, content_type, body = self.request("/api/health")
         self.assertEqual((status, content_type), (200, "application/json"))
         self.assertEqual(json.loads(body), {"ok": True})
+
+    def test_scene_proxy_preserves_binary(self):
+        status, content_type, body = self.request("/scene3d/scene/live")
+        self.assertEqual((status, content_type), (200, "application/octet-stream"))
+        self.assertEqual(body, StubSceneHandler.payload)
+        header_length = struct.unpack_from("<I", body, 0)[0]
+        header = json.loads(body[4:4 + header_length])
+        self.assertEqual(header["count"], 2)
+        self.assertEqual(header["units"], "relative")
 
     def test_frame_is_served_inside_root(self):
         status, content_type, body = self.request("/frames/1")

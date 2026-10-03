@@ -35,9 +35,11 @@ selected-event evidence view.
 
 ## Capabilities and Constraints
 
-Read-only. Polls the local event API every two seconds, shows only real statuses and metrics,
-and falls back to an honest empty state. Decisions happen in Slack. Blocked exit is the only
-hazard in scope. No placeholder numbers, faces, secrets, copied assets or em dashes.
+Read-only. Polls the local event and scene services every two seconds, shows only real statuses
+and measurements, and falls back to honest empty states. A local Three.js panel reconstructs
+relative depth from the latest camera frame, preserves source colors and marks hazard points.
+Decisions happen in Slack. Blocked exit is the only hazard in scope. No placeholder numbers,
+faces, secrets, copied assets or em dashes.
 
 ## Brand Commitments
 
@@ -46,8 +48,9 @@ hazard accent, one resolved accent, otherwise neutral. No decorative gradients o
 
 ## Evidence on Hand
 
-The event API supplies event JSON, rule text, proposed fix, status and evidence paths. Optional
-`story/numbers.json` supplies measured GB10 metrics. No other numbers or imagery may be invented.
+The event API supplies event JSON, rule text, proposed fix, status and evidence paths. The scene
+service supplies a measured binary point cloud and GB10 depth time. Optional `story/numbers.json`
+supplies other measured GB10 metrics. No other numbers or imagery may be invented.
 
 ## Product Principles
 

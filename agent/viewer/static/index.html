@@ -7,6 +7,7 @@
   <title>Site Safety Watch</title>
   <link rel="stylesheet" href="/app.css">
   <script src="/app.js" defer></script>
+  <script type="module" src="/scene3d.js"></script>
 </head>
 <body>
   <!--
@@ -38,32 +39,59 @@
 
   <main class="console-shell">
     <section class="evidence-column" aria-label="Current camera and selected evidence">
-      <section class="camera-panel" aria-labelledby="camera-title">
-        <div class="panel-heading camera-heading">
-          <div>
-            <p class="section-label">Camera evidence</p>
-            <h2 id="camera-title">Exit route</h2>
+      <div class="visual-evidence-grid">
+        <section class="camera-panel" aria-labelledby="camera-title">
+          <div class="panel-heading camera-heading">
+            <div>
+              <p class="section-label">Camera evidence</p>
+              <h2 id="camera-title">Exit route</h2>
+            </div>
+            <span class="source-label" id="source-label">Waiting for evidence</span>
           </div>
-          <span class="source-label" id="source-label">Waiting for evidence</span>
-        </div>
 
-        <div class="camera-stage" id="camera-stage">
-          <video id="clip" muted loop playsinline autoplay hidden>
-            <source src="/clip" type="video/mp4">
-          </video>
-          <img id="camera-frame" src="/frame-placeholder.svg" alt="" hidden>
-          <div class="camera-empty" id="camera-empty">
-            <div class="scan-corners" aria-hidden="true"></div>
-            <p>Watching. No hazards yet.</p>
-            <span>Evidence appears here when the local model records an event.</span>
+          <div class="camera-stage" id="camera-stage">
+            <video id="clip" muted loop playsinline autoplay hidden>
+              <source src="/clip" type="video/mp4">
+            </video>
+            <img id="camera-frame" src="/frame-placeholder.svg" alt="" hidden>
+            <div class="camera-empty" id="camera-empty">
+              <div class="scan-corners" aria-hidden="true"></div>
+              <p>Watching. No hazards yet.</p>
+              <span>Evidence appears here when the local model records an event.</span>
+            </div>
+            <div class="hazard-stamp" id="hazard-stamp" hidden>
+              <span>Blocked exit</span>
+              <strong id="hazard-zone">Zone pending</strong>
+            </div>
+            <div class="camera-caption" id="camera-caption" hidden>Replay of a clip recorded today</div>
           </div>
-          <div class="hazard-stamp" id="hazard-stamp" hidden>
-            <span>Blocked exit</span>
-            <strong id="hazard-zone">Zone pending</strong>
+        </section>
+
+        <section class="scene3d-panel" aria-labelledby="scene3d-title">
+          <div class="panel-heading scene3d-heading">
+            <div>
+              <p class="section-label">Spatial evidence</p>
+              <h2 id="scene3d-title">Depth reconstruction</h2>
+            </div>
+            <span class="source-label scene3d-state" id="scene3d-state" data-state="checking">Scene checking</span>
           </div>
-          <div class="camera-caption" id="camera-caption" hidden>Replay of a clip recorded today</div>
-        </div>
-      </section>
+
+          <div class="scene3d-stage" id="scene3d-stage">
+            <canvas id="scene3d-canvas" role="img" aria-label="Interactive three-dimensional point cloud of the monitored exit"></canvas>
+            <div class="scene3d-empty" id="scene3d-empty" role="status">
+              <div class="depth-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+              <p>Waiting for local depth.</p>
+              <span>The 3D view appears when the scene service reports a frame.</span>
+            </div>
+            <div class="scene3d-orbit-hint" id="scene3d-orbit-hint" hidden>Drag to orbit</div>
+          </div>
+
+          <div class="scene3d-caption">
+            <span>Depth estimated from one camera on the GB10</span>
+            <strong id="scene3d-depth" hidden></strong>
+          </div>
+        </section>
+      </div>
 
       <section class="detail-panel" id="detail" aria-labelledby="detail-title">
         <div class="panel-heading detail-heading">
@@ -122,12 +150,15 @@
     </aside>
   </main>
 
-  <footer class="metrics-strip" id="metrics" hidden>
-    <div class="metrics-label">
-      <span class="state-dot" aria-hidden="true"></span>
-      <strong>Measured on the GB10</strong>
-    </div>
-    <dl id="metrics-list"></dl>
+  <footer class="footer-bar">
+    <strong class="cosmos-credit">Built on NVIDIA Cosmos</strong>
+    <section class="metrics-strip" id="metrics" aria-label="Measured GB10 metrics" hidden>
+      <div class="metrics-label">
+        <span class="state-dot" aria-hidden="true"></span>
+        <strong>Measured on the GB10</strong>
+      </div>
+      <dl id="metrics-list"></dl>
+    </section>
   </footer>
 </body>
 </html>
