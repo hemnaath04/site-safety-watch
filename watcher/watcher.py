@@ -16,7 +16,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import config, dedup, rules, store, vision
+from . import config, dedup, rules, store, vision, zones
 from .sampler import utc_now
 
 
@@ -64,9 +64,10 @@ def _handle(conn, client, jpeg_bytes, clip_name, zone, log):
     return row
 
 
-def run(clip, zone, fake=False, no_frames=False, interval=None):
+def run(clip, zone=None, fake=False, no_frames=False, interval=None):
     conn = store.connect()
     client = vision.get_vision(fake)
+    zone = zones.resolve_zone(clip, override=zone)
 
     def log(msg):
         print(msg, file=sys.stderr)
@@ -90,7 +91,8 @@ def run(clip, zone, fake=False, no_frames=False, interval=None):
 def main(argv=None):
     p = argparse.ArgumentParser(description="Site Safety Watch watcher")
     p.add_argument("--clip", default="fake_cam", help="mp4 path or stream URL")
-    p.add_argument("--zone", required=True, help="zone name from the clip config")
+    p.add_argument("--zone", default=None,
+                   help="override the zone; otherwise resolved from the clip name or config")
     p.add_argument("--fake-vision", action="store_true", help="use the canned client")
     p.add_argument("--no-frames", action="store_true",
                    help="drive from the fake client with no video (logic smoke test)")
