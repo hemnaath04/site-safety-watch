@@ -10,3 +10,4 @@ __pycache__/
 *.mov
 .DS_Store
 .claude/settings.local.json
+site/.vercel/
