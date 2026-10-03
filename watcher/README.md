@@ -37,7 +37,8 @@ Zone is resolved from the clip name (`NN_hazard_zone.mp4`) or `watcher/zones.py`
 `--zone` to override.
 
 ## The ssw CLI (contract 0.5)
-Each command prints JSON only. `ssw pending` prints the bare string `NO_REPLY` when empty.
+Each command prints JSON only. `ssw pending` and `ssw pending-resolved` print the bare string
+`NO_REPLY` when empty.
 ```
 ./watcher/ssw events --status new
 ./watcher/ssw event <id>
@@ -45,7 +46,22 @@ Each command prints JSON only. `ssw pending` prints the bare string `NO_REPLY` w
 ./watcher/ssw mark-posted <id>
 ./watcher/ssw dispose <id> approved|false_alarm --by <slack_user>
 ./watcher/ssw pending
+./watcher/ssw pending-resolved             # events that just went clear, not yet announced
+./watcher/ssw mark-resolved-announced <id> # call after the agent posts the all-clear
 ```
+
+## Annotated evidence frame
+After blur, the saved hazard frame has the obstruction box and a label
+(`BLOCKED EXIT - 29 CFR 1910.37(a)(3)`) drawn on it, so an alert or screenshot reads at a
+glance. A frame with no box (a clear or resolution frame) is left plain. On by default;
+`--no-annotate` or `SSW_ANNOTATE=0` to disable.
+
+## Auto-resolution (closes the loop)
+After two clear checks in a row in a zone (exit visible and not blocked), the watcher marks
+the open events there `resolved` with `resolved_ts`, a `resolved_frame_path` and a measured
+`time_to_clear_sec`. On by default; disable with `--no-auto-resolve` (or `SSW_AUTO_RESOLVE=0`),
+tune the streak with `SSW_CLEARS_TO_RESOLVE` (default 2). The agent polls `ssw pending-resolved`
+to post the all-clear once.
 Tip: `alias ssw="python -m watcher.ssw"` from the repo root.
 
 ## Settings (env)

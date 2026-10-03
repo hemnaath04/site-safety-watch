@@ -51,6 +51,11 @@ def main(argv=None):
 
     sub.add_parser("pending")
 
+    sub.add_parser("pending-resolved")
+
+    pra = sub.add_parser("mark-resolved-announced")
+    pra.add_argument("id", type=int)
+
     args = p.parse_args(argv)
     conn = store.connect()
 
@@ -84,6 +89,22 @@ def main(argv=None):
         _out({"count": len(new),
               "events": [{"id": e["id"], "hazard": e["hazard"], "zone": e["zone"]}
                          for e in new]})
+        return
+    if args.cmd == "pending-resolved":
+        done = store.pending_resolved(conn)
+        if not done:
+            print("NO_REPLY")
+            return
+        _out({"count": len(done),
+              "events": [{"id": e["id"], "zone": e["zone"],
+                          "time_to_clear_sec": e["time_to_clear_sec"],
+                          "resolved_ts": e["resolved_ts"],
+                          "resolved_frame_path": e["resolved_frame_path"]}
+                         for e in done]})
+        return
+    if args.cmd == "mark-resolved-announced":
+        ev = store.mark_resolved_announced(conn, args.id)
+        _out(ev or {"error": "not found", "id": args.id})
         return
 
 

@@ -14,19 +14,23 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
-from . import blur, config, dedup, motion, rules, store, vision, zones
+from . import annotate, blur, config, dedup, motion, resolve, rules, store, vision, zones
 from . import enhance as enhance_mod
 from . import locate as locate_mod
 from . import verifier, voting
 from .sampler import now_local
 
 
-def _save_frame(jpeg_bytes, clip_name, when, do_blur=True) -> str:
+def _save_frame(jpeg_bytes, clip_name, when, do_blur=True, box=None, hazard=None) -> str:
     config.ensure_dirs()
     if do_blur and jpeg_bytes:
         jpeg_bytes = blur.blur_jpeg(jpeg_bytes)
+    # Annotate after blur so the drawn frame is already privacy safe; no box means no drawing.
+    if config.ANNOTATE and jpeg_bytes and box:
+        jpeg_bytes = annotate.annotate_jpeg(jpeg_bytes, box, annotate.label_for(hazard))
     stamp = when.strftime("%Y%m%dT%H%M%S")
     safe = Path(clip_name).stem or "cam"
     out = config.FRAMES_DIR / f"{safe}_{stamp}_{abs(hash(when)) % 10000}.jpg"
@@ -61,9 +65,32 @@ def _log_decision(rec) -> None:
         pass
 
 
+def _seconds_between(start_iso, end_dt) -> float:
+    """Seconds from an ISO timestamp to a datetime, never negative."""
+    try:
+        return max(0.0, (end_dt - datetime.fromisoformat(start_iso)).total_seconds())
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def _resolve_zone(conn, zone, jpeg_bytes, clip_name, do_blur, log) -> None:
+    """Mark every open event in a zone resolved, with the clear time and a frame."""
+    active = store.active_events(conn, zone)
+    if not active:
+        return
+    when = now_local()
+    resolved_ts = store.now_iso()
+    frame_path = _save_frame(jpeg_bytes, clip_name, when, do_blur=do_blur)
+    for ev in active:
+        ttc = _seconds_between(ev["ts"], when)
+        store.resolve_event(conn, ev["id"], resolved_ts=resolved_ts,
+                            resolved_frame_path=frame_path, time_to_clear_sec=ttc)
+        log(f"resolved {ev['id']}: {zone} clear, time to clear {ttc:.0f}s")
+
+
 def _handle(conn, client, jpeg_bytes, clip_name, zone, log,
             voter=None, second_look=False, do_blur=True,
-            enhance=False, locate=False, zone_box=None, verify=None):
+            enhance=False, locate=False, zone_box=None, verify=None, resolver=None):
     """Classify one frame and store a new event if it is a real, confirmed, non-duplicate
     hazard. Every frame is observed by the voter (when on) and logged to the decisions log.
     """
@@ -117,6 +144,13 @@ def _handle(conn, client, jpeg_bytes, clip_name, zone, log,
         "box": box, "present": present, "voted": met, "action": action,
     })
 
+    # Auto-resolution: a clear check is an exit that is visible and not blocked. Two in a row
+    # close the open events in the zone. A hazard or unreadable frame resets the streak.
+    if resolver is not None:
+        clear = valid and bool(event.get("exit_visible")) and event.get("hazard") == "none"
+        if resolver.observe(zone, clear):
+            _resolve_zone(conn, zone, jpeg_bytes, clip_name, do_blur, log)
+
     if not (valid and present and met):
         if action == "malformed":
             log(f"skip: malformed event: {event}")
@@ -136,7 +170,8 @@ def _handle(conn, client, jpeg_bytes, clip_name, zone, log,
         log(f"dup: {hazard} in {zone} already open")
         return None
 
-    frame_path = _save_frame(jpeg_bytes, clip_name, when, do_blur=do_blur)
+    frame_path = _save_frame(jpeg_bytes, clip_name, when, do_blur=do_blur,
+                             box=box, hazard=hazard)
     key = dedup.make_dedup_key(hazard, zone, when, config.DEDUP_WINDOW_MIN)
     row = store.insert_event(
         conn, clip=clip_name, hazard=hazard, zone=zone,
@@ -149,7 +184,8 @@ def _handle(conn, client, jpeg_bytes, clip_name, zone, log,
 
 def run(clip, zone=None, fake=False, no_frames=False, interval=None,
         stream=False, max_frames=None, motion_gate=False, second_look=False,
-        do_blur=True, vote=None, enhance=None, locate=None, verifier_url=None):
+        do_blur=True, vote=None, enhance=None, locate=None, verifier_url=None,
+        auto_resolve=None):
     conn = store.connect()
     client = vision.get_vision(fake)
     zone = zones.resolve_zone(clip, override=zone)
@@ -163,12 +199,15 @@ def run(clip, zone=None, fake=False, no_frames=False, interval=None,
     voter = voting.Voter(*spec) if spec else None
     vurl = config.VERIFIER_URL if verifier_url is None else verifier_url
     verify = verifier.CosmosVerifier(vurl).confirms if vurl else None
+    auto_resolve = config.AUTO_RESOLVE if auto_resolve is None else auto_resolve
+    resolver = resolve.Resolver() if auto_resolve else None
 
     def log(msg):
         print(msg, file=sys.stderr)
 
     kw = dict(voter=voter, second_look=second_look, do_blur=do_blur,
-              enhance=enhance, locate=locate, zone_box=zone_box, verify=verify)
+              enhance=enhance, locate=locate, zone_box=zone_box, verify=verify,
+              resolver=resolver)
 
     created = []
     if no_frames:
@@ -216,13 +255,20 @@ def main(argv=None):
                    help="ask for the obstruction box and require it to overlap the exit zone")
     p.add_argument("--verifier-url", default=None,
                    help="second verifier (Cosmos) OpenAI-compatible URL, local host only")
+    p.add_argument("--no-auto-resolve", action="store_true",
+                   help="do not auto-resolve events after two clear checks in a row")
+    p.add_argument("--no-annotate", action="store_true",
+                   help="do not draw the box and label on the saved hazard frame")
     args = p.parse_args(argv)
+    if args.no_annotate:
+        config.ANNOTATE = False
     run(args.clip, args.zone, fake=args.fake_vision, no_frames=args.no_frames,
         interval=args.interval, stream=args.stream, max_frames=args.max_frames,
         motion_gate=args.motion_gate, second_look=args.second_look,
         do_blur=not args.no_blur, vote=args.vote,
         enhance=True if args.enhance else None,
-        locate=True if args.locate else None, verifier_url=args.verifier_url)
+        locate=True if args.locate else None, verifier_url=args.verifier_url,
+        auto_resolve=False if args.no_auto_resolve else None)
 
 
 if __name__ == "__main__":
