@@ -32,3 +32,20 @@ about accuracy on real clips. Accuracy numbers come only from `story/numbers.jso
 
 vLLM reports that this GPU runs the FP4 weights through its Marlin weight-only path, so we do
 not claim native FP4 speedups.
+
+## How the agent is wired on the box
+
+| Piece | Where | Notes |
+|---|---|---|
+| Sandbox | NemoClaw sandbox `safety` (OpenClaw 2026.7.1, OpenShell 0.0.116) | inference via `inference.local` to our vLLM |
+| Model path for the sandbox | `host.openshell.internal:8000` = `172.18.0.1:8000` | forwarder `~/fwd/vllm-bridge-fwd.py` in tmux `vllm-fwd` to `127.0.0.1:8000` |
+| Event API | tmux `ssw-api`: `agent/api/server.py` on `172.18.0.1:8100` | bridge only, not the venue Wi-Fi; `SSW_CMD` points at the `ssw` CLI |
+| Sandbox network rule | `agent/policy/ssw-api.yaml` | only `node` may reach port 8100, five routes |
+| Skill | `/sandbox/.openclaw/workspace/skills/site-safety-watch` | `nemoclaw safety skill install agent/skill/site-safety-watch` |
+| #safety | `requireMention: false` for its channel id | so `approve <id>` works without an @mention |
+| Alerts | OpenClaw cron command job, every 1 min: `node .../ssw.mjs post-new` | no model call; prints `NO_REPLY` when nothing is new |
+
+Why alerts are a command job, not an agent turn: our first scheduled agent turn (same check,
+light context, thinking off) used 135,359 input and 3,963 output tokens and took 63 s, longer
+than the one minute interval (`openclaw cron runs`, 12:46). The alert text is fixed code output
+anyway, so code posts it and the model is kept for reading frames and talking to people.

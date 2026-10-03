@@ -11,6 +11,7 @@ const CLI = join(dirname(fileURLToPath(import.meta.url)), "ssw.mjs");
 
 const EVENT = { id: 7, hazard: "blocked_exit", zone: "exit_a", status: "new" };
 let pendingText = "NO_REPLY";
+let newList = null; // override for GET /events?status=new
 let requests = [];
 let server;
 let baseUrl;
@@ -28,8 +29,10 @@ before(async () => {
       const { pathname, searchParams } = new URL(req.url, "http://x");
       let m;
       if (req.method === "GET" && pathname === "/pending") return send(200, { text: pendingText });
-      if (req.method === "GET" && pathname === "/events")
+      if (req.method === "GET" && pathname === "/events") {
+        if (searchParams.get("status") === "new" && newList !== null) return send(200, newList);
         return send(200, [{ ...EVENT, status: searchParams.get("status") ?? "any" }]);
+      }
       if ((m = pathname.match(/^\/events\/(\d+)(\/\w+)?$/))) {
         const id = Number(m[1]);
         if (id === 404) return send(404, { error: "no such event" });
@@ -189,4 +192,30 @@ test("falls back to config.json when SSW_API_URL is unset", async () => {
   const { apiUrl } = JSON.parse(readFileSync(new URL("./config.json", import.meta.url), "utf8"));
   assert.equal(r.code, 1);
   assert.ok(r.stderr.includes(new URL(apiUrl).host), r.stderr);
+});
+
+test("post-new prints each new alert and marks it posted", async () => {
+  newList = [{ ...EVENT, id: 9 }, { ...EVENT, id: 7 }];
+  requests = [];
+  const r = await run(["post-new"]);
+  newList = null;
+  assert.equal(r.code, 0);
+  assert.equal(r.stdout, "Blocked exit at exit_a. Reply approve 7\n\nBlocked exit at exit_a. Reply approve 9\n");
+  assert.deepEqual(requests.map((q) => `${q.method} ${q.url}`), [
+    "GET /events?status=new",
+    "GET /events/7/alert",
+    "POST /events/7/posted",
+    "GET /events/9/alert",
+    "POST /events/9/posted",
+  ]);
+});
+
+test("post-new prints NO_REPLY and posts nothing when there is nothing new", async () => {
+  newList = [];
+  requests = [];
+  const r = await run(["post-new"]);
+  newList = null;
+  assert.equal(r.code, 0);
+  assert.equal(r.stdout, "NO_REPLY\n");
+  assert.deepEqual(requests.map((q) => `${q.method} ${q.url}`), ["GET /events?status=new"]);
 });

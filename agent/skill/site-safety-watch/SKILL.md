@@ -19,6 +19,9 @@ failed and quote its error line. Do not guess the answer.
 
 ## 1. Check for hazards
 
+A scheduled job already posts every new alert to this channel once a minute without you
+(`ssw.mjs post-new`). Only run this check when a person asks for it.
+
 When someone asks you to check for hazards, or a scheduled check runs:
 
 1. Run `node <skill dir>/ssw.mjs pending`.
