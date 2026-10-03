@@ -349,7 +349,7 @@ class Twin:
                 c.group = group
             self.groups[name] = group
         self.detector = detector
-        self.tracker = tracker.Tracker()
+        self.tracker = tracker.Tracker(max_speed=6.0, slack_m=1.5)  # loose gate: mappings are rough
         self.state_lock = threading.Lock()
         self.people = []
         self.doors = {d["id"]: {"open": None, "blocked": None, "obstruction_floor": None,
@@ -434,6 +434,8 @@ class Twin:
             self.primary[key] = cid
             dets.extend(found)
         tracks = self.tracker.update(tracker.fuse(dets), now)
+        # Pins only for people seen in this frame, so a jittery projection never leaves a ghost.
+        tracks = [tr.as_dict() for tr in self.tracker.tracks if tr.last_seen == now]
         with self.state_lock:
             self.people = tracks
             self.batch_ms.append(ms)
