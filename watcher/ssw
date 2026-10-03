@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Thin wrapper so the agent can call `ssw ...`. Delegates to the Python CLI from the
+# repo root. Prefers python3, falls back to python.
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+py="$(command -v python3 || command -v python)"
+cd "$here" && exec "$py" -m watcher.ssw "$@"
