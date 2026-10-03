@@ -27,7 +27,7 @@ MAX_AFTER_MIN = 7 * 24 * 60
 _escalated: set[int] = set()
 _escalated_lock = threading.Lock()
 
-STATUSES = ("new", "posted", "approved", "false_alarm")
+STATUSES = ("new", "posted", "approved", "false_alarm", "resolved")
 DISPOSITIONS = ("approved", "false_alarm")
 SLACK_USER_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 ID_RE = re.compile(r"^[0-9]{1,18}$")
@@ -185,6 +185,14 @@ class Handler(BaseHTTPRequestHandler):
             lines = [stats.escalation_text(ev, stats.minutes_waiting(ev, now)) for ev in due]
             return 200, {"text": "\n".join(lines), "event_ids": [int(ev["id"]) for ev in due]}
 
+        if method == "GET" and parts == ["resolved", "pending"]:
+            data = run_ssw("pending-resolved")
+            if not isinstance(data, dict) or not data.get("events"):
+                return 200, {"text": "NO_REPLY"}
+            evs = data["events"]
+            return 200, {"text": "\n".join(stats.resolved_text(ev) for ev in evs),
+                         "event_ids": [int(ev["id"]) for ev in evs]}
+
         if method == "GET" and parts == ["events"]:
             status = query.get("status", ["new"])[0]
             if status not in STATUSES:
@@ -200,6 +208,8 @@ class Handler(BaseHTTPRequestHandler):
                 return 200, run_ssw("event", event_id)
             if method == "GET" and rest == ["alert"]:
                 return 200, build_alert(run_ssw("event", event_id))
+            if method == "POST" and rest == ["resolved-announced"]:
+                return 200, run_ssw("mark-resolved-announced", event_id)
             if method == "POST" and rest == ["posted"]:
                 return 200, run_ssw("mark-posted", event_id)
             if method == "POST" and rest == ["disposition"]:

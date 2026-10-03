@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from rules import title_for  # noqa: E402
 
-STATUSES = ("new", "posted", "approved", "false_alarm")
+STATUSES = ("new", "posted", "approved", "false_alarm", "resolved")
 OPEN = ("new", "posted")
 DECIDED = ("approved", "false_alarm")
 MAX_OPEN_IDS_IN_DIGEST = 10
@@ -58,12 +58,14 @@ def compute_stats(events, start: datetime, end: datetime) -> dict:
         if status in by_status:
             by_status[status] += 1
         zone = by_zone.setdefault(ev.get("zone") or "unknown",
-                                  {"total": 0, "open": 0, "approved": 0, "false_alarm": 0})
+                                  {"total": 0, "open": 0, "approved": 0, "false_alarm": 0, "resolved": 0})
         zone["total"] += 1
         if status in OPEN:
             zone["open"] += 1
             open_ids.append(ev.get("id"))
             open_minutes.append(_minutes(end - ts))
+        elif status == "resolved":
+            zone["resolved"] += 1
         elif status in DECIDED:
             zone[status] += 1
             decided = parse_ts(ev.get("disposition_ts"))
@@ -100,8 +102,9 @@ def digest_text(stats: dict) -> str:
     s = stats["by_status"]
     lines = [
         f"*Site Safety Watch: last {n} h*",
-        f"{stats['total']} hazards: {s['new']} new, {s['posted']} posted, "
-        f"{s['approved']} approved, {s['false_alarm']} false alarm.",
+        f"{stats['total']} {'hazard' if stats['total'] == 1 else 'hazards'}: {s['new']} new, "
+        f"{s['posted']} posted, {s['approved']} approved, {s['false_alarm']} false alarm, "
+        f"{s.get('resolved', 0)} confirmed clear.",
         "By zone: " + ", ".join(
             f"{zone} {z['total']} ({z['open']} open, {z['approved']} approved, "
             f"{z['false_alarm']} false alarm)"
@@ -145,3 +148,20 @@ def escalation_text(event: dict, minutes: int) -> str:
     return (f"Escalation: event {eid} ({title_for(event.get('hazard', ''))}, "
             f"{event.get('zone', 'unknown')}) has had no decision for {int(minutes)} min. "
             f"Reply `approve {eid}` or `false-alarm {eid}`.")
+
+
+def format_seconds(sec) -> str:
+    """'48 s' under 90 s, else '3 min 12 s'."""
+    sec = int(round(float(sec)))
+    if sec < 90:
+        return f"{sec} s"
+    return f"{sec // 60} min {sec % 60} s"
+
+
+def resolved_text(event: dict) -> str:
+    """One Slack line when the camera confirms an exit is clear again (auto-resolution)."""
+    title = title_for(event.get("hazard") or "blocked_exit")
+    t = event.get("time_to_clear_sec")
+    measured = f" Measured: {format_seconds(t)} from first sighting to clear." if t is not None else ""
+    return (f"*Exit cleared*: event {event.get('id')} ({title.lower()}, {event.get('zone')}) is "
+            f"confirmed clear by the camera.{measured}")

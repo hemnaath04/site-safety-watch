@@ -20,7 +20,8 @@ failed and quote its error line. Do not guess the answer.
 ## 1. Check for hazards
 
 A scheduled job already posts every new alert to this channel once a minute without you
-(`ssw.mjs post-new`). Only run this check when a person asks for it.
+(`ssw.mjs post-new`), and another posts the all-clear when the camera confirms an exit is clear
+again (`ssw.mjs post-resolved`). Only run this check when a person asks for it.
 
 When someone asks you to check for hazards, or a scheduled check runs:
 

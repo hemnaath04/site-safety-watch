@@ -17,6 +17,7 @@ const USAGE = [
   "       node ssw.mjs posted <id>",
   "       node ssw.mjs dispose <id> approved|false_alarm --by <slack_user_id>",
   "       node ssw.mjs post-new",
+  "       node ssw.mjs post-resolved",
   "       node ssw.mjs stats [--hours N]",
   "       node ssw.mjs digest [--hours N]",
   "       node ssw.mjs escalate [--after-min N]",
@@ -129,6 +130,22 @@ async function main(argv) {
       const by = rest[3].trim();
       if (!by) usage("--by needs a Slack user id");
       print(await call("POST", `/events/${id}/disposition`, { disposition, by }));
+      return;
+    }
+    case "post-resolved": {
+      // Scheduled command job (no model call): post the all-clear for events the camera
+      // confirmed clear, then mark each announced so it posts once. NO_REPLY when none.
+      if (rest.length) usage("post-resolved takes no arguments");
+      const data = await call("GET", "/resolved/pending");
+      if (typeof data?.text !== "string") fail("API /resolved/pending response has no text field");
+      if (data.text === "NO_REPLY") {
+        process.stdout.write("NO_REPLY\n");
+        return;
+      }
+      for (const id of data.event_ids || []) {
+        await call("POST", `/events/${checkId(String(id))}/resolved-announced`);
+      }
+      process.stdout.write(data.text + "\n");
       return;
     }
     case "post-new": {

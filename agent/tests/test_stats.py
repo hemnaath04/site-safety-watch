@@ -35,12 +35,12 @@ class ComputeStatsTest(unittest.TestCase):
         self.assertEqual(self.s["window"]["to"], "2026-10-03T14:00:00+00:00")
         self.assertEqual(self.s["total"], 5)
         self.assertEqual(self.s["by_status"],
-                         {"new": 1, "posted": 1, "approved": 2, "false_alarm": 1})
+                         {"new": 1, "posted": 1, "approved": 2, "false_alarm": 1, "resolved": 0})
 
     def test_by_zone(self):
         self.assertEqual(self.s["by_zone"], {
-            "exit_a": {"total": 3, "open": 2, "approved": 1, "false_alarm": 0},
-            "exit_b": {"total": 2, "open": 0, "approved": 1, "false_alarm": 1},
+            "exit_a": {"total": 3, "open": 2, "approved": 1, "false_alarm": 0, "resolved": 0},
+            "exit_b": {"total": 2, "open": 0, "approved": 1, "false_alarm": 1, "resolved": 0},
         })
 
     def test_open_ids_oldest_first_and_timings(self):
@@ -72,7 +72,7 @@ class DigestTest(unittest.TestCase):
         lines = text.splitlines()
         self.assertEqual(lines[0], "*Site Safety Watch: last 24 h*")
         self.assertLessEqual(len(lines), 8)
-        self.assertEqual(lines[1], "5 hazards: 1 new, 1 posted, 2 approved, 1 false alarm.")
+        self.assertEqual(lines[1], "5 hazards: 1 new, 1 posted, 2 approved, 1 false alarm, 0 confirmed clear.")
         self.assertIn("exit_a 3 (2 open, 1 approved, 0 false alarm)", lines[2])
         self.assertIn("exit_b 2 (0 open, 1 approved, 1 false alarm)", lines[2])
         self.assertIn("Median time to decision: 10.0 min.", text)
@@ -112,3 +112,26 @@ class EscalationTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ResolvedTextTest(unittest.TestCase):
+    def test_all_clear_line_uses_measured_time(self):
+        line = stats.resolved_text({"id": 7, "zone": "exit_1", "time_to_clear_sec": 192.4})
+        self.assertIn("event 7", line)
+        self.assertIn("exit_1", line)
+        self.assertIn("3 min 12 s", line)
+        self.assertNotIn(chr(0x2014), line)
+
+    def test_short_and_missing_times(self):
+        self.assertEqual(stats.format_seconds(48), "48 s")
+        self.assertNotIn("Measured", stats.resolved_text({"id": 1, "zone": "a"}))
+
+    def test_plural_and_resolved_in_digest(self):
+        from datetime import datetime, timezone
+        end = datetime(2026, 10, 3, 18, 0, tzinfo=timezone.utc)
+        start, end = stats.window(end, 24)
+        ev = {"id": 1, "ts": "2026-10-03T13:00:00-04:00", "zone": "exit_1",
+              "hazard": "blocked_exit", "status": "resolved"}
+        text = stats.digest_text(stats.compute_stats([ev], start, end))
+        self.assertIn("1 hazard:", text)
+        self.assertIn("1 confirmed clear", text)
