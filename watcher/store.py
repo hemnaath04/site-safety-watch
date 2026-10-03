@@ -5,8 +5,8 @@ Raw video never leaves the box; only frame paths and text live here.
 """
 from __future__ import annotations
 
+import json
 import sqlite3
-from datetime import datetime, timezone
 from pathlib import Path
 
 from . import config
@@ -24,18 +24,43 @@ CREATE TABLE IF NOT EXISTS events (
   dedup_key TEXT,
   status TEXT,
   disposition_by TEXT,
-  disposition_ts TEXT
+  disposition_ts TEXT,
+  box TEXT,
+  resolved_ts TEXT,
+  resolved_frame_path TEXT,
+  time_to_clear_sec REAL,
+  resolved_announced INTEGER DEFAULT 0
 );
 """
 
 _COLUMNS = [
     "id", "ts", "clip", "hazard", "zone", "confidence", "explanation",
-    "frame_path", "dedup_key", "status", "disposition_by", "disposition_ts",
+    "frame_path", "dedup_key", "status", "disposition_by", "disposition_ts", "box",
+    "resolved_ts", "resolved_frame_path", "time_to_clear_sec", "resolved_announced",
 ]
+
+# Columns added after the first schema; each is nullable so older databases migrate safely.
+_ADDED_COLUMNS = {
+    "box": "TEXT",
+    "resolved_ts": "TEXT",
+    "resolved_frame_path": "TEXT",
+    "time_to_clear_sec": "REAL",
+    "resolved_announced": "INTEGER DEFAULT 0",
+}
+
+
+def _migrate(conn) -> None:
+    """Add any newer columns to an older db that predates them."""
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(events)")]
+    for name, decl in _ADDED_COLUMNS.items():
+        if name not in cols:
+            conn.execute(f"ALTER TABLE events ADD COLUMN {name} {decl}")
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    # Local time (timezone aware) so the logs and alerts read in the site's clock, even
+    # inside a container with no system timezone.
+    return config.now_local().isoformat(timespec="seconds")
 
 
 def connect(db_path: Path | None = None) -> sqlite3.Connection:
@@ -44,20 +69,31 @@ def connect(db_path: Path | None = None) -> sqlite3.Connection:
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute(SCHEMA)
+    _migrate(conn)
     return conn
 
 
 def _row_to_dict(row: sqlite3.Row) -> dict:
-    return {k: row[k] for k in _COLUMNS}
+    d = {k: row[k] for k in _COLUMNS}
+    # box is stored as a JSON string; emit it as an array (or None) so the console, the 3D
+    # view and the twin get a real list, not a string.
+    if d.get("box"):
+        try:
+            d["box"] = json.loads(d["box"])
+        except (ValueError, TypeError):
+            d["box"] = None
+    return d
 
 
 def insert_event(conn, *, clip, hazard, zone, confidence, explanation,
-                 frame_path, dedup_key, ts=None) -> dict:
+                 frame_path, dedup_key, box=None, ts=None) -> dict:
     ts = ts or now_iso()
+    box_json = json.dumps(box) if box is not None else None
     cur = conn.execute(
         "INSERT INTO events (ts, clip, hazard, zone, confidence, explanation, "
-        "frame_path, dedup_key, status) VALUES (?,?,?,?,?,?,?,?, 'new')",
-        (ts, clip, hazard, zone, float(confidence), explanation, frame_path, dedup_key),
+        "frame_path, dedup_key, status, box) VALUES (?,?,?,?,?,?,?,?, 'new', ?)",
+        (ts, clip, hazard, zone, float(confidence), explanation, frame_path,
+         dedup_key, box_json),
     )
     conn.commit()
     return get_event(conn, cur.lastrowid)
@@ -88,6 +124,43 @@ def dispose(conn, event_id, status, by) -> dict | None:
         "UPDATE events SET status = ?, disposition_by = ?, disposition_ts = ? WHERE id = ?",
         (status, by, now_iso(), event_id),
     )
+    conn.commit()
+    return get_event(conn, event_id)
+
+
+ACTIVE_STATUSES = ("new", "posted", "approved")
+
+
+def active_events(conn, zone) -> list[dict]:
+    """Open hazard events in a zone that could still be resolved."""
+    q = ("SELECT * FROM events WHERE zone = ? AND status IN "
+         "('new','posted','approved') ORDER BY id")
+    return [_row_to_dict(r) for r in conn.execute(q, (zone,)).fetchall()]
+
+
+def resolve_event(conn, event_id, *, resolved_ts, resolved_frame_path,
+                  time_to_clear_sec) -> dict | None:
+    """Mark an event resolved with the clear time, a resolution frame and time to clear."""
+    conn.execute(
+        "UPDATE events SET status = 'resolved', resolved_ts = ?, resolved_frame_path = ?, "
+        "time_to_clear_sec = ? WHERE id = ?",
+        (resolved_ts, resolved_frame_path, time_to_clear_sec, event_id),
+    )
+    conn.commit()
+    return get_event(conn, event_id)
+
+
+def pending_resolved(conn) -> list[dict]:
+    """Resolved events the agent has not announced yet."""
+    rows = conn.execute(
+        "SELECT * FROM events WHERE status = 'resolved' AND "
+        "COALESCE(resolved_announced, 0) = 0 ORDER BY id"
+    ).fetchall()
+    return [_row_to_dict(r) for r in rows]
+
+
+def mark_resolved_announced(conn, event_id) -> dict | None:
+    conn.execute("UPDATE events SET resolved_announced = 1 WHERE id = ?", (event_id,))
     conn.commit()
     return get_event(conn, event_id)
 

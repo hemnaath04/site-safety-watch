@@ -1,57 +1,132 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-03T12:52:00-04:00",
-  "title": "Design System: Site Safety Watch Console",
+  "generatedAt": "2026-10-03T16:49:02-04:00",
+  "title": "Design System: Site Safety Watch Command Wall",
   "extensions": {
     "colorMeta": {
-      "hazard": {"role": "primary", "displayName": "Safety Orange", "canonical": "#ff6a32", "tonalRamp": ["#35150b", "#5f2411", "#8c3518", "#bd461f", "#ef592a", "#ff7d50", "#ffb199", "#ffe2d6"]},
-      "resolved": {"role": "secondary", "displayName": "Resolved Teal", "canonical": "#57d6b1", "tonalRamp": ["#0b2720", "#123e34", "#195848", "#22735f", "#2f9178", "#57b99e", "#91d8c5", "#d0f2e8"]},
-      "canvas": {"role": "neutral", "displayName": "Carbon Canvas", "canonical": "#080b0f", "tonalRamp": ["#080b0f", "#10161c", "#27313c", "#3b4856", "#5d6b79", "#8995a1", "#c1c9d0", "#f3f0e9"]}
+      "zinc-black": {"role": "neutral", "displayName": "Zinc Black", "canonical": "#090b0c", "tonalRamp": ["#090b0c", "#15191b", "#282e31", "#41494d", "#626c71", "#8c979c", "#bcc5c8", "#eef1f2"]},
+      "shell-black": {"role": "neutral", "displayName": "Shell Black", "canonical": "#101416", "tonalRamp": ["#0b0e0f", "#181d1f", "#2d3437", "#474f53", "#697378", "#929da2", "#c0c8cb", "#eff2f3"]},
+      "panel-zinc": {"role": "neutral", "displayName": "Panel Zinc", "canonical": "#151b1e", "tonalRamp": ["#0c1012", "#1a2225", "#303a3e", "#4b565b", "#6d787d", "#96a1a6", "#c3cbce", "#f0f3f4"]},
+      "raised-zinc": {"role": "neutral", "displayName": "Raised Zinc", "canonical": "#1d2529", "tonalRamp": ["#0e1214", "#1d2529", "#354044", "#505c61", "#727e83", "#9aa5aa", "#c6ced1", "#f1f4f5"]},
+      "rule-strong": {"role": "neutral", "displayName": "Strong Rule", "canonical": "#39444a", "tonalRamp": ["#101416", "#22292d", "#39444a", "#536067", "#748087", "#9ba6ab", "#c6ced2", "#f1f4f5"]},
+      "rule-soft": {"role": "neutral", "displayName": "Soft Rule", "canonical": "#293238", "tonalRamp": ["#0e1214", "#1b2226", "#303a3f", "#4a555b", "#6c777d", "#95a0a5", "#c3cbcf", "#f0f3f4"]},
+      "paper-white": {"role": "neutral", "displayName": "Paper White", "canonical": "#f1f2ec", "tonalRamp": ["#25261f", "#414238", "#5f6053", "#7f8070", "#a1a28f", "#c2c3ae", "#dedfca", "#f1f2ec"]},
+      "text-muted": {"role": "neutral", "displayName": "Muted Text", "canonical": "#b3bec3", "tonalRamp": ["#1e2427", "#354045", "#4e5c62", "#687980", "#83979f", "#9fb2b9", "#c2d0d5", "#edf2f4"]},
+      "text-dim": {"role": "neutral", "displayName": "Dim Text", "canonical": "#849198", "tonalRamp": ["#171c1f", "#2c3539", "#424f54", "#596a70", "#71868d", "#8fa3aa", "#bbc9ce", "#ebf1f3"]},
+      "safety-lime": {"role": "primary", "displayName": "Safety Lime", "canonical": "#d8ff3f", "tonalRamp": ["#252e00", "#3d4a00", "#596a00", "#758b00", "#94ae00", "#b3d31d", "#d8ff3f", "#efffa7"]},
+      "signal-red": {"role": "secondary", "displayName": "Signal Red", "canonical": "#ff5838", "tonalRamp": ["#310900", "#551000", "#7d1a09", "#aa2816", "#d93b27", "#ff5838", "#ff9c88", "#ffe0d8"]},
+      "clear-teal": {"role": "secondary", "displayName": "Clear Teal", "canonical": "#5bd6c0", "tonalRamp": ["#052821", "#0b4438", "#126252", "#1d816c", "#2da18a", "#45bea7", "#79dfce", "#d5f7f0"]},
+      "response-amber": {"role": "tertiary", "displayName": "Response Amber", "canonical": "#efbd56", "tonalRamp": ["#2d1d00", "#4b3200", "#6c4a08", "#906515", "#b58128", "#d49e3d", "#efbd56", "#ffe7b1"]}
     },
     "typographyMeta": {
-      "display": {"displayName": "Hazard Stamp", "purpose": "The active hazard and zone."},
-      "body": {"displayName": "Evidence Copy", "purpose": "Observations, rules and fixes."},
-      "label": {"displayName": "Docket Label", "purpose": "Evidence sections and operational metadata."}
+      "display": {"displayName": "Camera Identity", "purpose": "Names the dominant monitored zone."},
+      "headline": {"displayName": "Command Identity", "purpose": "Names Site Safety Watch in the masthead."},
+      "title": {"displayName": "Module Title", "purpose": "Labels spatial, response and incident lanes."},
+      "body": {"displayName": "Evidence Copy", "purpose": "Carries findings, rules, captions and empty-state guidance."},
+      "label": {"displayName": "Operational Label", "purpose": "Carries status, metadata, controls and measured figures."}
     },
     "shadows": [
-      {"name": "hazard-lift", "value": "0 14px 34px rgba(0, 0, 0, 0.42)", "purpose": "Lifts the active hazard stamp over camera evidence."}
+      {"name": "hazard-overlay", "value": "0 18px 38px rgba(0, 0, 0, 0.45)", "purpose": "Separates the full-width hazard field from moving camera evidence."},
+      {"name": "evidence-legibility", "value": "0 2px 8px #000", "purpose": "Keeps camera identity and source labels readable over footage."}
     ],
     "motion": [
-      {"name": "evidence-enter", "value": "520ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Reveals a newly observed event once."}
+      {"name": "incident-enter", "value": "440ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Reveals a newly observed incident once with a horizontal clip."},
+      {"name": "reduced-motion", "value": "0.01ms linear", "purpose": "Collapses interface animation when reduced motion is requested."}
     ],
     "breakpoints": [
-      {"name": "stack", "value": "1100px"},
-      {"name": "compact", "value": "700px"}
+      {"name": "rail-compact", "value": "1040px"},
+      {"name": "stacked-command", "value": "760px"},
+      {"name": "narrow-handset", "value": "420px"}
     ]
   },
   "components": [
     {
-      "name": "Hazard Stamp",
+      "name": "Command Index",
       "kind": "custom",
-      "refersTo": "hazard-stamp",
-      "description": "The one urgent overlay on camera evidence.",
-      "html": "<div class=\"ds-hazard-stamp\"><span>BLOCKED EXIT</span><strong>EXIT B</strong></div>",
-      "css": ".ds-hazard-stamp { display:inline-block; padding:13px 16px 12px; color:#140904; background:#ff6a32; border-radius:7px; box-shadow:0 14px 34px rgba(0,0,0,.42); font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif; } .ds-hazard-stamp span { display:block; font-size:2rem; font-weight:900; letter-spacing:-.035em; } .ds-hazard-stamp strong { display:block; margin-top:4px; font-size:.75rem; letter-spacing:.07em; }"
+      "description": "The safety-lime SW block that anchors the masthead.",
+      "html": "<div class=\"ds-command-index\" aria-label=\"Site Safety Watch\">SW</div>",
+      "css": ".ds-command-index { width:42px; height:42px; display:grid; place-items:center; color:var(--black,#090b0c); background:var(--safety,#d8ff3f); font-family:var(--font,\"Barlow Condensed\",\"Arial Narrow\",sans-serif); font-size:1.15rem; font-weight:900; letter-spacing:-.02em; }"
     },
     {
-      "name": "Approved Status",
-      "kind": "chip",
-      "refersTo": "status-chip",
-      "description": "A text-first resolved state marker.",
-      "html": "<span class=\"ds-approved\">APPROVED</span>",
-      "css": ".ds-approved { display:inline-flex; padding:3px 8px; border:1px solid #28735f; border-radius:5px; color:#c4ffed; background:#12362f; font:800 .64rem ui-sans-serif,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif; letter-spacing:.03em; } .ds-approved:focus-visible { outline:3px solid #9dc6ff; outline-offset:3px; }"
+      "name": "System Cell",
+      "kind": "nav",
+      "description": "A ruled status cell for local service state and update time.",
+      "html": "<a class=\"ds-system-cell\" href=\"#\"><span>EVENT API</span><strong>ONLINE</strong></a>",
+      "css": ".ds-system-cell { min-width:112px; display:grid; gap:4px; padding:10px 13px; border-right:1px solid var(--line,#39444a); color:var(--dim,#849198); background:transparent; font-family:var(--font,\"Barlow Condensed\",\"Arial Narrow\",sans-serif); font-size:.65rem; letter-spacing:.07em; text-decoration:none; text-transform:uppercase; } .ds-system-cell strong { color:var(--clear,#5bd6c0); font-size:.76rem; font-weight:800; } .ds-system-cell:hover { background:var(--panel-raised,#1d2529); } .ds-system-cell:focus-visible { outline:3px solid var(--safety,#d8ff3f); outline-offset:3px; }"
+    },
+    {
+      "name": "Active Hazard Field",
+      "kind": "custom",
+      "refersTo": "hazard-new",
+      "description": "The full-width state field attached to the bottom of camera evidence.",
+      "html": "<div class=\"ds-hazard-field\"><div><strong>EXIT ROUTE BLOCKED</strong><span>EVENT PENDING</span></div><b>96%<small>CONFIDENCE</small></b></div>",
+      "css": ".ds-hazard-field { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:18px; padding:18px 20px; color:var(--black,#090b0c); background:var(--safety,#d8ff3f); box-shadow:0 18px 38px rgba(0,0,0,.45); font-family:var(--font,\"Barlow Condensed\",\"Arial Narrow\",sans-serif); text-transform:uppercase; } .ds-hazard-field strong { display:block; font-size:2.4rem; line-height:.88; font-weight:900; letter-spacing:-.035em; } .ds-hazard-field span { display:block; margin-top:8px; font-size:.72rem; font-weight:800; letter-spacing:.05em; } .ds-hazard-field b { font-size:3rem; line-height:.8; font-weight:900; text-align:right; } .ds-hazard-field small { display:block; margin-top:9px; font-size:.65rem; letter-spacing:.08em; }"
+    },
+    {
+      "name": "Module Heading",
+      "kind": "custom",
+      "description": "A compact ruled header shared by spatial and response lanes.",
+      "html": "<header class=\"ds-module-heading\"><div><strong>SPATIAL RECONSTRUCTION</strong><span>SECONDARY EVIDENCE</span></div><b>ONLINE</b></header>",
+      "css": ".ds-module-heading { min-height:58px; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 13px; border-bottom:1px solid var(--line-soft,#293238); color:var(--paper,#f1f2ec); background:var(--shell,#101416); font-family:var(--font,\"Barlow Condensed\",\"Arial Narrow\",sans-serif); text-transform:uppercase; } .ds-module-heading strong { display:block; font-size:.95rem; font-weight:900; letter-spacing:-.01em; } .ds-module-heading span { display:block; margin-top:4px; color:var(--dim,#849198); font-size:.66rem; font-weight:600; letter-spacing:.05em; } .ds-module-heading b { color:var(--clear,#5bd6c0); font-size:.65rem; font-weight:900; letter-spacing:.08em; }"
+    },
+    {
+      "name": "Active Orbit Control",
+      "kind": "button",
+      "description": "A compact square text control for the spatial reconstruction.",
+      "html": "<button class=\"ds-orbit-control\" type=\"button\" aria-pressed=\"true\">ORBIT</button>",
+      "css": ".ds-orbit-control { min-height:28px; padding:5px 8px; border:1px solid var(--line-soft,#293238); border-radius:0; color:var(--black,#090b0c); background:var(--safety,#d8ff3f); font-family:var(--font,\"Barlow Condensed\",\"Arial Narrow\",sans-serif); font-size:.6rem; font-weight:800; letter-spacing:.04em; text-transform:uppercase; cursor:pointer; } .ds-orbit-control:hover { color:var(--paper,#f1f2ec); background:var(--panel-raised,#1d2529); } .ds-orbit-control:focus-visible { outline:3px solid var(--safety,#d8ff3f); outline-offset:3px; }"
+    },
+    {
+      "name": "Selected Incident",
+      "kind": "button",
+      "refersTo": "incident-selected",
+      "description": "A selected entry in the full-width incident tape.",
+      "html": "<button class=\"ds-incident\" type=\"button\"><time>16:31</time><span><strong>EXIT ROUTE BLOCKED</strong><small>WAREHOUSE EAST</small></span><b>NEW</b></button>",
+      "css": ".ds-incident { width:100%; display:grid; grid-template-columns:50px minmax(0,1fr) auto; align-items:center; gap:10px; padding:12px 14px; border:0; border-right:1px solid var(--line,#39444a); border-radius:0; color:var(--black,#090b0c); background:var(--safety,#d8ff3f); font-family:var(--font,\"Barlow Condensed\",\"Arial Narrow\",sans-serif); text-align:left; cursor:pointer; } .ds-incident time { opacity:.72; font-size:.66rem; font-variant-numeric:tabular-nums; } .ds-incident strong { display:block; font-size:.76rem; } .ds-incident small { display:block; margin-top:3px; opacity:.72; font-size:.65rem; text-transform:uppercase; } .ds-incident b { font-size:.6rem; letter-spacing:.04em; text-transform:uppercase; } .ds-incident:hover { background:var(--clear,#5bd6c0); } .ds-incident:focus-visible { outline:3px solid var(--safety,#d8ff3f); outline-offset:-5px; }"
+    },
+    {
+      "name": "Stored Rule Block",
+      "kind": "custom",
+      "refersTo": "rule-block",
+      "description": "A flat zinc inset for the stored safety rule and proposed fix.",
+      "html": "<div class=\"ds-rule-block\"><p>Keep designated exit routes unobstructed.</p><strong>MOVE THE OBSTRUCTION AND VERIFY CLEARANCE.</strong></div>",
+      "css": ".ds-rule-block { padding:9px 10px; color:var(--muted,#b3bec3); background:var(--panel-raised,#1d2529); border-radius:0; font-family:var(--font,\"Barlow Condensed\",\"Arial Narrow\",sans-serif); font-size:.7rem; line-height:1.38; } .ds-rule-block p { margin:0; } .ds-rule-block strong { display:block; margin-top:5px; color:var(--paper,#f1f2ec); font-weight:600; }"
     }
   ],
   "narrative": {
-    "northStar": "The Evidence Docket",
-    "overview": "The console treats each detection as a record with evidence, time, status and human custody. Matte carbon surfaces reduce glare while a single safety orange mark pulls the active hazard forward.",
-    "keyCharacteristics": ["Evidence occupies the most space.", "Status is written as text and reinforced with color.", "Fine rules create chain-of-custody sections.", "New data moves once; unchanged data remains still."],
-    "rules": [
-      {"name": "The Earned Color Rule", "body": "Orange, amber and teal appear only when a real event state earns them.", "section": "colors"},
-      {"name": "The Five-Second Rule", "body": "Product name, active hazard, zone and event status remain readable before any supporting copy.", "section": "typography"},
-      {"name": "The Flat Record Rule", "body": "Evidence rows and detail fields use rules, never generic card shadows.", "section": "elevation"}
+    "northStar": "The Incident Command Wall",
+    "overview": "Site Safety Watch is a fixed-lane operational wallboard, not a dashboard assembled from cards. One live or recorded camera owns the field, while spatial reconstruction and the human response record form a compact verification stack at the right. The incident tape runs below both so the whole detection and disposition story reads in one sweep.\n\nThe world is industrial, flat and decisive. Zinc-black surfaces reduce glare, paper-white type stays legible at a distance, and high-visibility color appears as an earned field tied to a real state. Barlow Condensed gives the wall the density and authority of site signage without adding ornament. Rules, fixed lanes and hard edges create structure instead of floating containers.",
+    "keyCharacteristics": [
+      "The camera is the dominant source of truth.",
+      "Spatial evidence and response stay in a fixed right-hand stack.",
+      "The incident tape preserves chronology across the full lower edge.",
+      "Status is always stated in text and reinforced by color.",
+      "Every runtime claim and measurement comes from the local Dell Pro Max GB10."
     ],
-    "dos": ["Do make the newest unresolved evidence immediately visible.", "Do show honest loading, empty, unavailable and offline states.", "Do use tabular figures for time, confidence and measured values.", "Do preserve the camera, ledger and selected record at recording breakpoints."],
-    "donts": ["Don't invent metrics, status or evidence.", "Don't add decorative gradients, glows or stock imagery.", "Don't turn the console into a grid of equal metric cards.", "Don't animate unchanged polling results."]
+    "rules": [
+      {"name": "The Earned Signal Rule", "body": "Lime, red, teal and amber always communicate a named operational state. Never use them as decoration.", "section": "colors"},
+      {"name": "The Text Before Color Rule", "body": "Every status remains understandable when the signal color is unavailable.", "section": "colors"},
+      {"name": "The Distance Read Rule", "body": "The product name, camera identity, hazard, zone and status must read before supporting evidence at wallboard distance.", "section": "typography"},
+      {"name": "The Condensed Voice Rule", "body": "Barlow Condensed is the only interface family. Hierarchy comes from weight, scale and case, not font mixing.", "section": "typography"},
+      {"name": "The Fixed Lane Rule", "body": "Camera, spatial evidence, response and incident tape keep their rank at every width, even when the lanes stack.", "section": "layout"},
+      {"name": "The Ruled Surface Rule", "body": "Establish hierarchy with tone and rules. Shadow is reserved for information physically overlaid on camera evidence.", "section": "elevation"},
+      {"name": "The No Card Silhouette Rule", "body": "Never wrap modules in rounded rectangles. A module is a lane bounded by rules.", "section": "shapes"}
+    ],
+    "dos": [
+      "Do let the live or recorded camera dominate the wall.",
+      "Do preserve the camera, spatial reconstruction, response and incident-tape order on mobile.",
+      "Do use safety lime for active evidence and focus, red for the camera source, amber for approved work and teal only for confirmed clearance.",
+      "Do pair every color state with direct text.",
+      "Do show honest loading, empty, unavailable and offline states.",
+      "Do keep the local-runtime truth visible in the footer."
+    ],
+    "donts": [
+      "Don't introduce rounded cards, floating tiles, decorative gradients or ambient glows.",
+      "Don't turn the wall into a grid of equal metrics.",
+      "Don't invent measurements, confidence, status or evidence.",
+      "Don't animate unchanged polling results.",
+      "Don't use a cloud platform name or imply that inference leaves the Dell Pro Max GB10.",
+      "Don't add a second typeface, emoji or decorative stock imagery."
+    ]
   }
 }

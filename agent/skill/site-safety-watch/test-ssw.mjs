@@ -11,7 +11,9 @@ const CLI = join(dirname(fileURLToPath(import.meta.url)), "ssw.mjs");
 
 const EVENT = { id: 7, hazard: "blocked_exit", zone: "exit_a", status: "new" };
 let pendingText = "NO_REPLY";
+let escalationText = "NO_REPLY";
 let newList = null; // override for GET /events?status=new
+let resolvedPending = { text: "NO_REPLY" };
 let requests = [];
 let server;
 let baseUrl;
@@ -29,11 +31,17 @@ before(async () => {
       const { pathname, searchParams } = new URL(req.url, "http://x");
       let m;
       if (req.method === "GET" && pathname === "/pending") return send(200, { text: pendingText });
+      if (req.method === "GET" && pathname === "/resolved/pending") return send(200, resolvedPending);
+      if (req.method === "GET" && pathname === "/stats")
+        return send(200, { hours: Number(searchParams.get("hours") ?? 24), blocked_exit: 3, approved: 2, false_alarm: 1 });
+      if (req.method === "GET" && pathname === "/digest")
+        return send(200, { text: `Digest for the last ${searchParams.get("hours") ?? "24"} hours: 3 alerts.` });
+      if (req.method === "GET" && pathname === "/escalations") return send(200, { text: escalationText });
       if (req.method === "GET" && pathname === "/events") {
         if (searchParams.get("status") === "new" && newList !== null) return send(200, newList);
         return send(200, [{ ...EVENT, status: searchParams.get("status") ?? "any" }]);
       }
-      if ((m = pathname.match(/^\/events\/(\d+)(\/\w+)?$/))) {
+      if ((m = pathname.match(/^\/events\/(\d+)(\/[\w-]+)?$/))) {
         const id = Number(m[1]);
         if (id === 404) return send(404, { error: "no such event" });
         if (id === 500) return send(500, { error: "boom" });
@@ -41,6 +49,7 @@ before(async () => {
         if (req.method === "GET" && !sub) return send(200, { ...EVENT, id, rule: "29 CFR 1910.37" });
         if (req.method === "GET" && sub === "/alert") return send(200, { id, text: `Blocked exit at exit_a. Reply approve ${id}` });
         if (req.method === "POST" && sub === "/posted") return send(200, { ...EVENT, id, status: "posted" });
+        if (req.method === "POST" && sub === "/resolved-announced") return send(200, { ...EVENT, id, status: "resolved" });
         if (req.method === "POST" && sub === "/disposition") {
           const p = JSON.parse(body);
           return send(200, { ...EVENT, id, status: p.disposition, disposition_by: p.by });
@@ -218,4 +227,82 @@ test("post-new prints NO_REPLY and posts nothing when there is nothing new", asy
   assert.equal(r.code, 0);
   assert.equal(r.stdout, "NO_REPLY\n");
   assert.deepEqual(requests.map((q) => `${q.method} ${q.url}`), ["GET /events?status=new"]);
+});
+
+test("stats prints JSON, with and without --hours", async () => {
+  let r = await run(["stats"]);
+  assert.equal(r.code, 0);
+  assert.deepEqual(last(), { method: "GET", url: "/stats", body: null });
+  assert.equal(JSON.parse(r.stdout).blocked_exit, 3);
+  r = await run(["stats", "--hours", "168"]);
+  assert.equal(r.code, 0);
+  assert.equal(last().url, "/stats?hours=168");
+  assert.equal(JSON.parse(r.stdout).hours, 168);
+});
+
+test("digest prints .text raw", async () => {
+  let r = await run(["digest"]);
+  assert.equal(r.code, 0);
+  assert.equal(last().url, "/digest");
+  assert.equal(r.stdout, "Digest for the last 24 hours: 3 alerts.\n");
+  r = await run(["digest", "--hours", "8"]);
+  assert.equal(last().url, "/digest?hours=8");
+  assert.equal(r.stdout, "Digest for the last 8 hours: 3 alerts.\n");
+});
+
+test("escalate prints NO_REPLY or the escalation text raw", async () => {
+  escalationText = "NO_REPLY";
+  let r = await run(["escalate"]);
+  assert.equal(r.code, 0);
+  assert.equal(last().url, "/escalations");
+  assert.equal(r.stdout, "NO_REPLY\n");
+  escalationText = "Event 7 has waited 15 min for a decision.";
+  r = await run(["escalate", "--after-min", "15"]);
+  assert.equal(r.code, 0);
+  assert.equal(last().url, "/escalations?after_min=15");
+  assert.equal(r.stdout, "Event 7 has waited 15 min for a decision.\n");
+});
+
+test("stats, digest and escalate reject bad input with exit 2", async () => {
+  const cases = [
+    ["stats", "--hours"],
+    ["stats", "--hours", "0"],
+    ["stats", "--hours", "-3"],
+    ["stats", "--hours", "1.5"],
+    ["stats", "--hours", "24h"],
+    ["stats", "--hours", "007"],
+    ["stats", "--days", "1"],
+    ["stats", "24"],
+    ["digest", "--hours", "abc"],
+    ["digest", "--after-min", "5"],
+    ["escalate", "--after-min", "0"],
+    ["escalate", "--hours", "5"],
+    ["escalate", "--after-min", "5", "extra"],
+  ];
+  for (const args of cases) {
+    const before = requests.length;
+    const r = await run(args);
+    assert.equal(r.code, 2, `args ${JSON.stringify(args)}`);
+    assert.match(r.stderr, /usage: node ssw\.mjs/, `args ${JSON.stringify(args)}`);
+    assert.equal(r.stdout, "");
+    assert.equal(requests.length, before, `args ${JSON.stringify(args)} made a request`);
+  }
+});
+
+test("post-resolved posts the all-clear and marks each event announced", async () => {
+  resolvedPending = { text: "*Exit cleared*: event 4 ... Measured: 48 s from first sighting to clear.", event_ids: [4] };
+  requests = [];
+  const r = await run(["post-resolved"]);
+  resolvedPending = { text: "NO_REPLY" };
+  assert.equal(r.code, 0);
+  assert.match(r.stdout, /Exit cleared/);
+  assert.deepEqual(requests.map((q) => `${q.method} ${q.url}`), ["GET /resolved/pending", "POST /events/4/resolved-announced"]);
+});
+
+test("post-resolved prints NO_REPLY when nothing cleared", async () => {
+  requests = [];
+  const r = await run(["post-resolved"]);
+  assert.equal(r.code, 0);
+  assert.equal(r.stdout, "NO_REPLY\n");
+  assert.deepEqual(requests.map((q) => `${q.method} ${q.url}`), ["GET /resolved/pending"]);
 });

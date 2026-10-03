@@ -20,11 +20,19 @@ else starts until that loop has been recorded once.
   "hazard": "blocked_exit | none",
   "zone": "exit_a",
   "confidence": 0.0,
-  "explanation": "one sentence: what in the frame is blocking the exit"
+  "explanation": "one sentence: what in the frame is blocking the exit",
+  "box": [0, 0, 0, 0]
 }
 ```
 Later hazards (`spill`, `trip_cable`) are added to the enum only after Gate 2.
 `zone` comes from the clip's camera config, not from the model.
+`box` is optional (post-lock, for LOCATE): the obstruction box `[x, y, width, height]` in
+pixels, or `null`. The watcher accepts events with or without it.
+
+Post-lock, the model is asked for the raw schema `{exit_visible, blocked, box, confidence,
+explanation}`, enforced by vLLM guided decoding at temperature 0 so the reply always parses.
+The vision client maps it to the event above: `blocked_exit` when an exit is both visible
+and blocked, else `none`. Timestamps are stored in local time.
 
 ### 0.2 SQLite schema (`data/ssw.db`, owned by Mithuna, the single source of truth)
 ```sql
@@ -38,12 +46,20 @@ CREATE TABLE events (
   explanation TEXT,
   frame_path TEXT,       -- evidence frame on disk (raw video never leaves the box)
   dedup_key TEXT,        -- hazard + zone + time bucket
-  status TEXT,           -- new | posted | approved | false_alarm
+  status TEXT,           -- new | posted | approved | false_alarm | resolved
   disposition_by TEXT,   -- Slack user who approved or rejected
-  disposition_ts TEXT
+  disposition_ts TEXT,
+  box TEXT,              -- optional (post-lock, LOCATE): JSON [x,y,w,h] or null
+  resolved_ts TEXT,      -- post-lock, auto-resolution: when the zone went clear
+  resolved_frame_path TEXT,  -- the clear evidence frame
+  time_to_clear_sec REAL,    -- measured seconds from first seen to resolved
+  resolved_announced INTEGER DEFAULT 0  -- 1 once the agent has posted the resolution
 );
 ```
 A work order is this row with status `approved`; there is no second table or service.
+The columns after `disposition_ts` are nullable and added by a safe migration, so older
+databases keep working. Auto-resolution (post-lock): after two clear checks in a row in a
+zone, open events there move to `resolved` with the time, a frame and the time to clear.
 
 ### 0.3 Rule table (plain table in code, not the model)
 ```
@@ -73,8 +89,13 @@ ssw rule <hazard>                -> {"cite": ..., "text": ..., "fix": ...}
 ssw mark-posted <id>             -> event
 ssw dispose <id> approved|false_alarm --by <slack_user>  -> event
 ssw pending                      -> "NO_REPLY" if nothing new, else a short summary
+ssw pending-resolved             -> "NO_REPLY" if none, else resolved events not yet announced
+ssw mark-resolved-announced <id> -> event
 ```
 Until Mithuna's store exists, Hemnaath builds against a fake event inserted by hand.
+Resolution (post-lock): `pending-resolved` returns events that just went clear (with
+`time_to_clear_sec`, `resolved_ts`, `resolved_frame_path`); the agent posts the all-clear and
+calls `mark-resolved-announced` so it posts once.
 
 ---
 

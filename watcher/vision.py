@@ -10,7 +10,22 @@ import base64
 import json
 import urllib.request
 
-from . import config, rules
+from . import config, locate, rules
+
+
+def _jpeg_dims(jpeg_bytes):
+    """Return (width, height) of a JPEG, or (None, None) if it cannot be read."""
+    try:
+        import cv2
+        import numpy as np
+        arr = np.frombuffer(jpeg_bytes, dtype=np.uint8)
+        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if img is None:
+            return None, None
+        h, w = img.shape[:2]
+        return w, h
+    except Exception:
+        return None, None
 
 
 def _extract_json(text: str) -> dict:
@@ -21,6 +36,30 @@ def _extract_json(text: str) -> dict:
     if start == -1 or end == -1 or end < start:
         raise ValueError("no JSON object in reply")
     return json.loads(text[start:end + 1])
+
+
+def to_event(raw: dict, zone: str) -> dict:
+    """Map the raw model schema {exit_visible, blocked, box, confidence, explanation} to
+    the internal event {hazard, zone, confidence, explanation, box}. A blocked exit needs
+    an exit to be visible and blocked; otherwise the hazard is none.
+    """
+    exit_visible = bool(raw.get("exit_visible"))
+    blocked = bool(raw.get("blocked"))
+    hazard = "blocked_exit" if (exit_visible and blocked) else "none"
+    try:
+        conf = float(raw.get("confidence", 0) or 0)
+    except (TypeError, ValueError):
+        conf = 0.0
+    return {
+        "hazard": hazard,
+        "zone": zone,
+        "confidence": conf,
+        "explanation": raw.get("explanation", "") or "",
+        "box": raw.get("box") if hazard == "blocked_exit" else None,
+        # exit_visible is kept so auto-resolution can tell "exit visible and clear" apart from
+        # "no exit in frame" (we only resolve when the exit is visible and not blocked).
+        "exit_visible": exit_visible,
+    }
 
 
 class RealVision:
@@ -48,6 +87,13 @@ class RealVision:
             "temperature": 0,
             "max_tokens": 200,
             "chat_template_kwargs": {"enable_thinking": False},
+            # Enforce the JSON schema so the reply is always well formed. response_format is
+            # the OpenAI-compatible form; guided_json is the vLLM-native fallback.
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": "sighting", "schema": rules.VISION_SCHEMA},
+            },
+            "guided_json": rules.VISION_SCHEMA,
         }
         req = urllib.request.Request(
             f"{self.base_url}/chat/completions",
@@ -58,8 +104,13 @@ class RealVision:
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:
             body = json.loads(resp.read().decode("utf-8"))
         content = body["choices"][0]["message"]["content"]
-        event = _extract_json(content)
-        event["zone"] = zone  # zone comes from the clip config, never the model
+        event = to_event(_extract_json(content), zone)
+        # Qwen returns the box as 0..1000 xyxy of the image it saw (this jpeg); convert it to
+        # pixel [x, y, w, h] of that image so the overlap check and the stored box are right.
+        if event.get("box"):
+            w, h = _jpeg_dims(jpeg_bytes)
+            if w and h:
+                event["box"] = locate.qwen_xyxy1000_to_xywh(event["box"], w, h)
         return event
 
 
@@ -70,9 +121,10 @@ class FakeVision:
     drive a sequence, for example ["none", "none", "blocked_exit"]. jpeg_bytes may be None.
     """
 
-    def __init__(self, script=None, confidence=0.92):
+    def __init__(self, script=None, confidence=0.92, box=None):
         self.script = list(script) if script else None
         self.confidence = confidence
+        self.box = box
         self._i = 0
 
     def classify(self, jpeg_bytes, zone: str, prompt: str | None = None) -> dict:
@@ -88,7 +140,7 @@ class FakeVision:
             explanation = "the exit route is clear"
             conf = 0.95
         return {"hazard": hazard, "zone": zone, "confidence": conf,
-                "explanation": explanation}
+                "explanation": explanation, "box": self.box, "exit_visible": True}
 
 
 def get_vision(fake: bool):

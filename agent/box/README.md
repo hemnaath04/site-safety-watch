@@ -49,3 +49,21 @@ Why alerts are a command job, not an agent turn: our first scheduled agent turn 
 light context, thinking off) used 135,359 input and 3,963 output tokens and took 63 s, longer
 than the one minute interval (`openclaw cron runs`, 12:46). The alert text is fixed code output
 anyway, so code posts it and the model is kept for reading frames and talking to people.
+
+## How many cameras one GB10 handles (measured 13:53 to 14:05)
+
+`loadtest.py` simulates cameras, each sending one frame every 2 s to Qwen3.6 with the exit
+schema (thinking off), ramping the camera count, and samples `nvidia-smi` once a second.
+0 errors at every level.
+
+| Cameras | Checks per camera per min (target 30) | p50 / p95 latency | GPU busy | Power |
+|---|---|---|---|---|
+| 1 | 30.0 | 0.57 / 0.60 s | single samples | 22 W |
+| 4 | 30.0 | 0.67 / 0.80 s | 92.7% | 48 W |
+| 8 | 25.0 | 2.51 / 2.70 s | 94.0% | 56 W |
+| 16 | 14.0 | 4.89 / 5.06 s | 93.3% | 56 W |
+| 24 | 10.2 | 7.02 / 7.52 s | 92.9% | 56 W mean, 64 W max |
+
+The ceiling is about 4.1 checks per second (compute-bound: 640 px frames and 16 concurrent
+sequences did not raise it). A blocked exit is a static hazard, so one check every 6 s per
+camera is enough: about 24 cameras per box.

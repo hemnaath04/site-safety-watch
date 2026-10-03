@@ -24,6 +24,10 @@ network_policies:
           - allow: { method: GET, path: "/pending" }
           - allow: { method: GET, path: "/events" }
           - allow: { method: GET, path: "/events/**" }
+          - allow: { method: GET, path: "/stats" }
+          - allow: { method: GET, path: "/digest" }
+          - allow: { method: GET, path: "/escalations" }
+          - allow: { method: GET, path: "/resolved/pending" }
           - allow: { method: POST, path: "/events/**" }
     binaries:
       - { path: /usr/local/bin/node }

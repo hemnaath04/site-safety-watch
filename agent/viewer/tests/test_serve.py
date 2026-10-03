@@ -91,6 +91,32 @@ class StubSceneHandler(BaseHTTPRequestHandler):
             self.send_error(404)
 
 
+class StubTwinHandler(BaseHTTPRequestHandler):
+    jpeg = b"\xff\xd8\xff\xe0fake-twin-jpeg"
+    seen = []
+
+    def log_message(self, _fmt, *_args):
+        pass
+
+    def do_GET(self):
+        StubTwinHandler.seen.append(self.path)
+        if self.path == "/twin/state":
+            payload = json.dumps({"t": 1.5, "people": [], "doors": [], "cameras": []}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+        elif self.path == "/twin/camera/cam_1.jpg?t=42":
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(self.jpeg)))
+            self.end_headers()
+            self.wfile.write(self.jpeg)
+        else:
+            self.send_error(404)
+
+
 class ViewerTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -110,11 +136,18 @@ class ViewerTest(unittest.TestCase):
         self.scene_thread = threading.Thread(target=self.scene.serve_forever, daemon=True)
         self.scene_thread.start()
 
+        self.twin_port = free_port()
+        StubTwinHandler.seen = []
+        self.twin = ThreadingHTTPServer(("127.0.0.1", self.twin_port), StubTwinHandler)
+        self.twin_thread = threading.Thread(target=self.twin.serve_forever, daemon=True)
+        self.twin_thread.start()
+
         self.viewer_port = free_port()
         self.env = patch.dict(os.environ, {
             "SSW_API_URL": f"http://127.0.0.1:{self.api_port}",
             "SSW_FRAMES_ROOT": str(self.root),
             "SCENE_URL": f"http://127.0.0.1:{self.scene_port}",
+            "TWIN_URL": f"http://127.0.0.1:{self.twin_port}",
         })
         self.env.start()
         self.repo_root = patch.object(viewer, "REPO_ROOT", self.root)
@@ -130,6 +163,8 @@ class ViewerTest(unittest.TestCase):
         self.api.server_close()
         self.scene.shutdown()
         self.scene.server_close()
+        self.twin.shutdown()
+        self.twin.server_close()
         self.repo_root.stop()
         self.env.stop()
         self.tmp.cleanup()
@@ -146,6 +181,8 @@ class ViewerTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(content_type, "text/html")
         self.assertIn(b"Site Safety Watch", body)
+        self.assertIn(b"100% local on Dell Pro Max GB10", body)
+        self.assertNotIn(b"Built on NVIDIA Cosmos", body)
         self.assertEqual(self.request("/app.css")[:2], (200, "text/css"))
         self.assertEqual(self.request("/app.js")[:2], (200, "text/javascript"))
 
@@ -162,6 +199,64 @@ class ViewerTest(unittest.TestCase):
         header = json.loads(body[4:4 + header_length])
         self.assertEqual(header["count"], 2)
         self.assertEqual(header["units"], "relative")
+
+    def test_twin_proxy_forwards_json(self):
+        status, content_type, body = self.request("/twin/state")
+        self.assertEqual((status, content_type), (200, "application/json"))
+        self.assertEqual(json.loads(body)["t"], 1.5)
+        self.assertEqual(StubTwinHandler.seen[-1], "/twin/state")
+
+    def test_twin_proxy_forwards_camera_jpeg_with_query(self):
+        status, content_type, body = self.request("/twin/camera/cam_1.jpg?t=42")
+        self.assertEqual((status, content_type), (200, "image/jpeg"))
+        self.assertEqual(body, StubTwinHandler.jpeg)
+
+    def test_twin_proxy_passes_upstream_404(self):
+        status, _content_type, _body = self.request("/twin/nope")
+        self.assertEqual(status, 404)
+
+    def test_twin_proxy_refuses_traversal(self):
+        status, _content_type, _body = self.request("/twin/%2e%2e/secret")
+        self.assertEqual(status, 404)
+        self.assertEqual(StubTwinHandler.seen, [])
+
+    def test_twin_proxy_reports_unavailable(self):
+        with patch.dict(os.environ, {"TWIN_URL": f"http://127.0.0.1:{free_port()}"}):
+            status, content_type, body = self.request("/twin/state")
+        self.assertEqual((status, content_type), (502, "application/json"))
+        self.assertEqual(json.loads(body), {"error": "twin service unavailable"})
+
+    def test_twin_page_is_static_not_proxied(self):
+        status, content_type, body = self.request("/twin.html")
+        self.assertEqual((status, content_type), (200, "text/html"))
+        self.assertIn(b"Live 3D twin", body)
+        self.assertEqual(self.request("/twin.css")[:2], (200, "text/css"))
+        self.assertEqual(self.request("/twin.js")[:2], (200, "text/javascript"))
+        self.assertEqual(StubTwinHandler.seen, [])
+
+    def test_room_scan_is_served_from_env_path(self):
+        scan = self.root / "room.glb"
+        scan.write_bytes(b"glTF\x02\x00\x00\x00fake-scan" * 10000)
+        with patch.dict(os.environ, {"TWIN_ROOM_GLB": str(scan)}):
+            status, content_type, body = self.request("/room.glb")
+        self.assertEqual((status, content_type), (200, "model/gltf-binary"))
+        self.assertEqual(body, scan.read_bytes())
+
+    def test_room_scan_is_404_when_unset_or_missing(self):
+        with patch.dict(os.environ, {}):
+            os.environ.pop("TWIN_ROOM_GLB", None)
+            self.assertEqual(self.request("/room.glb")[0], 404)
+        with patch.dict(os.environ, {"TWIN_ROOM_GLB": str(self.root / "missing.glb")}):
+            self.assertEqual(self.request("/room.glb")[0], 404)
+        with patch.dict(os.environ, {"TWIN_ROOM_GLB": str(self.root)}):
+            self.assertEqual(self.request("/room.glb")[0], 404)
+
+    def test_csp_allows_blob_images_for_embedded_scan_textures(self):
+        with urllib.request.urlopen(f"http://127.0.0.1:{self.viewer_port}/twin.html", timeout=5) as response:
+            csp = response.headers["Content-Security-Policy"]
+        self.assertIn("img-src 'self' data: blob:", csp)
+        self.assertIn("connect-src 'self' blob:", csp)
+        self.assertIn("script-src 'self';", csp)
 
     def test_frame_is_served_inside_root(self):
         status, content_type, body = self.request("/frames/1")

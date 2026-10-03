@@ -1,0 +1,42 @@
+{
+  "updated": "2026-10-03 15:58 EDT",
+  "video": null,
+  "metrics": [
+    {
+      "value": "0.57 s",
+      "label": "per camera check with one camera",
+      "detail": "Median of the load test, Qwen3.6 on vLLM, thinking off, 22 W",
+      "when": "13:53 to 14:05",
+      "status": "measured"
+    },
+    {
+      "value": "24 cameras",
+      "label": "on one box at 10 checks per camera per minute",
+      "detail": "Simulated load: median 7.0 s per check, GPU 93% busy, 56 W mean, 0 errors",
+      "when": "13:53 to 14:05",
+      "status": "measured"
+    },
+    {
+      "value": "510 ms",
+      "label": "to post an alert to Slack",
+      "detail": "A model-free OpenClaw command job. The same check run as a full agent turn took 63 s and 135,359 input tokens",
+      "when": "12:52",
+      "status": "measured"
+    },
+    {
+      "value": "3 of 3",
+      "label": "blocked exits caught, 0 of 7 false alarms",
+      "detail": "10 staged clips filmed by the team (3 blocked, 7 clear), voting setting",
+      "when": "15:11",
+      "status": "provisional",
+      "note": "Labels are awaiting final confirmation"
+    },
+    {
+      "value": "22 ms",
+      "label": "to refuse an upload from inside the sandbox",
+      "detail": "OpenShell policy denied node to example.com:443, while the same process reached the local event API",
+      "when": "14:17",
+      "status": "measured"
+    }
+  ]
+}

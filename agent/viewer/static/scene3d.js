@@ -3,7 +3,7 @@ import { OrbitControls } from "./vendor/OrbitControls.js";
 import { parseSceneBuffer } from "./scene3d-format.js";
 
 const REFRESH_MS = 2000;
-const HAZARD_COLOR = new THREE.Color("#ff6a32");
+const HAZARD_COLOR = new THREE.Color("#d8ff3f");
 const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 const elements = {
@@ -24,6 +24,8 @@ let resizeObserver;
 let selectedEventId = null;
 let requestInFlight = false;
 let renderedOnce = false;
+let frozenXform = null; // center and scale from the first frame, so the cloud does not rescale
+let holding = false;
 
 function setSceneState(kind, text) {
   elements.state.dataset.state = kind;
@@ -67,7 +69,7 @@ function setupRenderer() {
   controls.enablePan = false;
   controls.minDistance = 1.15;
   controls.maxDistance = 6;
-  controls.autoRotate = !REDUCED_MOTION.matches;
+  controls.autoRotate = false;
   controls.autoRotateSpeed = 0.42;
 
   const grid = new THREE.GridHelper(4, 16, "#3b4856", "#17202a");
@@ -120,9 +122,13 @@ function normalizePositions(positions) {
       max[axis] = Math.max(max[axis], value);
     }
   }
-  const center = min.map((value, axis) => (value + max[axis]) / 2);
-  const span = Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2], 0.0001);
-  const scale = 2.45 / span;
+  if (!frozenXform) {
+    const c = min.map((value, axis) => (value + max[axis]) / 2);
+    const span = Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2], 0.0001);
+    frozenXform = { center: c, scale: 2.45 / span };
+  }
+  const center = frozenXform.center;
+  const scale = frozenXform.scale;
   const normalized = new Float32Array(positions.length);
   for (let index = 0; index < positions.length; index += 3) {
     normalized[index] = (positions[index] - center[0]) * scale;
@@ -195,9 +201,10 @@ function renderSceneBuffer(buffer) {
   disposeGroup(pointGroup);
   pointGroup = replacement;
   scene.add(pointGroup);
-  applyHorizontalFov(Number(data.header.hfov_deg));
-  controls.target.set(0, 0, 0);
-  controls.update();
+  if (!renderedOnce) {
+    applyHorizontalFov(Number(data.header.hfov_deg));
+    setView("camera");
+  }
 
   elements.empty.hidden = true;
   elements.orbitHint.hidden = false;
@@ -212,6 +219,53 @@ function renderSceneBuffer(buffer) {
   renderedOnce = true;
 }
 
+function setView(name) {
+  if (!camera || !controls) return;
+  const xf = frozenXform;
+  if (name === "camera" && xf) {
+    // where the real camera stood, in normalized space, looking into the scene
+    camera.position.set(-xf.center[0] * xf.scale, -xf.center[1] * xf.scale, -xf.center[2] * xf.scale);
+  } else if (name === "top") {
+    camera.position.set(0, 3.2, 0.001);
+  } else if (name === "side") {
+    camera.position.set(3.2, 0.4, 0);
+  } else {
+    camera.position.set(0, 0.35, -3.15);
+  }
+  controls.target.set(0, 0, 0);
+  controls.update();
+}
+
+function addToolbar() {
+  const bar = document.createElement("div");
+  bar.className = "scene3d-toolbar";
+  bar.setAttribute("role", "toolbar");
+  bar.setAttribute("aria-label", "3D view controls");
+  const mk = (label, onClick, pressed) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    if (pressed !== undefined) b.setAttribute("aria-pressed", String(pressed));
+    b.addEventListener("click", () => onClick(b));
+    bar.appendChild(b);
+    return b;
+  };
+  mk("Camera", () => setView("camera"));
+  mk("Top", () => setView("top"));
+  mk("Side", () => setView("side"));
+  mk("Rotate", (b) => {
+    controls.autoRotate = !controls.autoRotate;
+    b.setAttribute("aria-pressed", String(controls.autoRotate));
+  }, false);
+  mk("Hold", (b) => {
+    holding = !holding;
+    b.textContent = holding ? "Live" : "Hold";
+    b.setAttribute("aria-pressed", String(holding));
+    setSceneState(holding ? "online" : "online", holding ? "Held frame" : "Live depth");
+  }, false);
+  elements.stage.appendChild(bar);
+}
+
 async function requestScene(path) {
   const response = await fetch(path, { cache: "no-store" });
   if (!response.ok) throw new Error(`${path} returned ${response.status}`);
@@ -219,7 +273,7 @@ async function requestScene(path) {
 }
 
 async function refreshScene() {
-  if (requestInFlight || !renderer) return;
+  if (requestInFlight || !renderer || holding) return;
   requestInFlight = true;
   try {
     let buffer;
@@ -246,10 +300,11 @@ window.addEventListener("ssw:event-selected", (event) => {
 });
 
 REDUCED_MOTION.addEventListener("change", (event) => {
-  if (controls) controls.autoRotate = !event.matches;
+  if (controls && event.matches) controls.autoRotate = false;
 });
 
 if (setupRenderer()) {
+  addToolbar();
   refreshScene();
   window.setInterval(refreshScene, REFRESH_MS);
 }

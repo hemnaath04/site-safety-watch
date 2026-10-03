@@ -43,6 +43,10 @@ def _scene_base() -> str:
     return os.environ.get("SCENE_URL", "http://127.0.0.1:8300").rstrip("/")
 
 
+def _twin_base() -> str:
+    return os.environ.get("TWIN_URL", "http://127.0.0.1:8400").rstrip("/")
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "ssw-viewer/1"
 
@@ -56,6 +60,8 @@ class Handler(BaseHTTPRequestHandler):
             self._serve_numbers()
         elif path == "/clip":
             self._serve_clip()
+        elif path == "/room.glb":
+            self._serve_room_scan()
         elif path.startswith("/frames/"):
             self._serve_frame(path.removeprefix("/frames/"))
         elif path == "/scene3d" or path.startswith("/scene3d/"):
@@ -66,6 +72,12 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.query:
                 suffix += "?" + parsed.query
             self._proxy(_scene_base(), suffix, "scene service unavailable")
+        elif path.startswith("/twin/"):
+            if ".." in path.split("/"):
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            target = quote(path, safe="/") + ("?" + parsed.query if parsed.query else "")
+            self._proxy(_twin_base(), target, "twin service unavailable")
         elif path == "/api" or path.startswith("/api/"):
             suffix = path.removeprefix("/api") or "/"
             if parsed.query:
@@ -86,7 +98,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; media-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'")
+        self.send_header("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob:; media-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' blob:; frame-ancestors 'none'")
         if length is not None:
             self.send_header("Content-Length", str(length))
 
@@ -200,7 +212,7 @@ class Handler(BaseHTTPRequestHandler):
             end = min(end, size - 1)
             status = HTTPStatus.PARTIAL_CONTENT
         length = max(0, end - start + 1)
-        self._headers(status, "video/mp4", length)
+        self._headers(status, mimetypes.guess_type(clip.name)[0] or "video/mp4", length)
         self.send_header("Accept-Ranges", "bytes")
         if status == HTTPStatus.PARTIAL_CONTENT:
             self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
@@ -216,6 +228,26 @@ class Handler(BaseHTTPRequestHandler):
                     break
                 self.wfile.write(chunk)
                 remaining -= len(chunk)
+
+    def _serve_room_scan(self):
+        configured = os.environ.get("TWIN_ROOM_GLB")
+        if not configured:
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        scan = Path(configured).expanduser().resolve()
+        if not scan.is_file():
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        try:
+            source = scan.open("rb")
+        except OSError:
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        with source:
+            self._headers(HTTPStatus.OK, "model/gltf-binary", scan.stat().st_size)
+            self.end_headers()
+            while chunk := source.read(BUFFER_SIZE):
+                self.wfile.write(chunk)
 
     def _serve_file(self, path: Path, content_type: str):
         try:

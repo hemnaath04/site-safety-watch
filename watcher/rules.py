@@ -29,24 +29,65 @@ def lookup_rule(hazard: str) -> dict:
     return dict(r)
 
 
-# What we send to the vision model. Ask for strict JSON only, matching contract 0.1.
-# zone is passed in by the watcher from the clip config, not chosen by the model.
+# The raw schema the vision model must return, enforced by vLLM guided decoding at
+# temperature 0 so the reply is always well formed (this is what fixes the second look,
+# which used to get free text back and discard real sightings). vision.py maps this raw
+# shape to the internal event (hazard, zone, confidence, explanation, box) below.
+VISION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "exit_visible": {"type": "boolean"},
+        "blocked": {"type": "boolean"},
+        "box": {
+            "type": ["array", "null"],
+            "items": {"type": "number"},
+            "minItems": 4,
+            "maxItems": 4,
+        },
+        "confidence": {"type": "number"},
+        "explanation": {"type": "string"},
+    },
+    "required": ["exit_visible", "blocked", "confidence", "explanation"],
+    "additionalProperties": False,
+}
+
+# What we send to the vision model. The enforced schema guarantees the fields; the prompt
+# tells the model how to decide them. zone is set by the watcher, not the model.
 VISION_PROMPT = (
     "You are a workplace safety inspector looking at one still frame from a site camera. "
-    "Check only for this hazard: a blocked exit, meaning anything placed in or blocking an "
-    "exit route or an exit door (a cart, boxes, a stack of chairs, equipment). "
-    "If the exit route is clear, the hazard is none. "
-    "Reply with ONLY this JSON and nothing else: "
-    '{"hazard": "blocked_exit" or "none", '
-    '"confidence": a number from 0.0 to 1.0, '
-    '"explanation": "one sentence naming what is blocking the exit, or why it is clear"}'
+    "Decide two things: is an exit route or exit door visible in the frame (exit_visible), "
+    "and is it blocked (blocked). OSHA 29 CFR 1910.37: exit routes must be free and "
+    "unobstructed, so any movable item (standing table, stand, chair, cart, boxes, equipment) "
+    "placed in front of an exit door or in the floor area people use to reach it counts as "
+    "blocked, even if someone could squeeze past. Ignore permanent fixtures: built-in desks and "
+    "seating rows, handrails, walls and pillars. If an exit is blocked, give box as the bounding "
+    "box of the obstruction, "
+    "otherwise box is null. Give a confidence from 0.0 to 1.0 and a one sentence explanation."
+    # Note: Qwen returns the box as 0..1000 xyxy regardless of wording; vision.py converts it
+    # to pixel [x, y, w, h] of the frame.
 )
 
-# Stretch: a stricter re-ask to confirm a candidate and cut false alarms (after Gate 2).
+# Stricter re-ask used by the second look. Same enforced schema, so the reply still parses.
 SECOND_LOOK_PROMPT = (
-    "Look again carefully. Is an exit route or exit door really blocked in this frame? "
-    "Do not report a hazard unless you are confident. Reply with ONLY the same JSON format."
+    "Look again carefully at this frame. Set blocked to true only if a movable item (standing "
+    "table, stand, chair, cart, boxes, equipment) is placed in front of an exit door or in its "
+    "approach (OSHA 29 CFR 1910.37: exit routes free and unobstructed). Built-in desks, seating "
+    "rows, handrails, walls and pillars do not count. If you are unsure, set blocked to false. "
+    "Report exit_visible, "
+    "blocked, box, confidence and a one sentence explanation."
 )
+
+
+def _valid_box(box) -> bool:
+    """A box is optional; if present it must be four non-negative numbers."""
+    if box is None:
+        return True
+    if not isinstance(box, (list, tuple)) or len(box) != 4:
+        return False
+    try:
+        return all(float(v) >= 0 for v in box)
+    except (TypeError, ValueError):
+        return False
 
 
 def validate_event(obj) -> bool:
@@ -62,5 +103,7 @@ def validate_event(obj) -> bool:
     if not 0.0 <= c <= 1.0:
         return False
     if not isinstance(obj.get("explanation", ""), str):
+        return False
+    if not _valid_box(obj.get("box")):
         return False
     return True

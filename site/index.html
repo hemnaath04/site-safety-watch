@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Site Safety Watch</title>
+<meta name="description" content="An always-on safety agent that watches site cameras on one Dell Pro Max with GB10, catches a blocked fire exit, posts it to Slack with the OSHA rule and records a supervisor's decision. The video never leaves the box.">
+<style>
+  :root {
+    --canvas: #080b0f;
+    --surface: #0e1319;
+    --surface-raised: #141a21;
+    --rule: #27313c;
+    --rule-strong: #3b4856;
+    --text: #f3f0e9;
+    --muted: #aab6c3;
+    --faint: #82909f;
+    --hazard: #ff6a32;
+    --hazard-soft: #3d1d12;
+    --resolved: #57d6b1;
+    --resolved-soft: #12362f;
+    --posted: #f0bd55;
+    --focus: #9dc6ff;
+    --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--canvas); }
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--text);
+    font: 400 1rem/1.55 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--text); text-underline-offset: 3px; text-decoration-color: var(--rule-strong); }
+  a:hover { text-decoration-color: var(--text); }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
+  .shell { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+  .label {
+    font-size: 0.72rem; font-weight: 800; letter-spacing: 0.11em; text-transform: uppercase;
+    color: var(--faint);
+  }
+  section.shell { padding: 56px 16px; border-top: 1px solid var(--rule); }
+  h2 { font-size: 1.35rem; font-weight: 800; letter-spacing: -0.02em; margin: 8px 0 20px; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--muted); }
+
+  /* Hero */
+  header.shell { padding: 40px 16px 56px; }
+  .topline { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; align-items: center; }
+  .topline a { font-size: 0.85rem; color: var(--muted); }
+  .hero { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 40px; margin-top: 48px; align-items: center; }
+  h1 { font-size: clamp(2.2rem, 6vw, 3.6rem); font-weight: 900; line-height: 1.02; letter-spacing: -0.045em; margin: 10px 0 18px; }
+  .lead { font-size: 1.12rem; color: var(--muted); max-width: 34em; }
+  .lead strong { color: var(--text); font-weight: 600; }
+
+  /* Example Slack card */
+  .card {
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden;
+  }
+  .card-head { display: flex; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--rule); }
+  .stamp {
+    background: var(--hazard); color: var(--canvas); border-radius: 7px; padding: 13px 16px 12px; margin: 14px;
+    font-weight: 900; font-size: 1.25rem; letter-spacing: -0.02em; line-height: 1.1;
+  }
+  .stamp small { display: block; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.11em; margin-bottom: 4px; }
+  .card dl { margin: 0 14px 6px; display: grid; grid-template-columns: 5.2em 1fr; gap: 6px 12px; font-size: 0.88rem; }
+  .card dt { color: var(--faint); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; padding-top: 2px; }
+  .card dd { margin: 0; }
+  .card .actions { display: flex; gap: 8px; padding: 12px 14px 14px; }
+  .chip {
+    display: inline-block; border-radius: 6px; padding: 5px 10px; font-size: 0.8rem; font-weight: 700;
+    background: var(--surface-raised); color: var(--muted); border: 1px solid var(--rule-strong);
+  }
+  .chip.go { background: var(--resolved-soft); color: var(--resolved); border-color: transparent; }
+  .resolved-line {
+    margin: 0 14px 14px; padding: 9px 12px; border-radius: 6px; background: var(--resolved-soft); color: var(--resolved);
+    font-size: 0.85rem; font-weight: 700;
+  }
+  .caption { font-size: 0.78rem; color: var(--faint); margin-top: 8px; }
+
+  /* Loop */
+  ol.loop { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; counter-reset: step; }
+  ol.loop li { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 16px; counter-increment: step; }
+  ol.loop li::before { content: counter(step, decimal-leading-zero); display: block; color: var(--faint); font-weight: 800; font-size: 0.75rem; letter-spacing: 0.1em; margin-bottom: 10px; font-variant-numeric: tabular-nums; }
+  ol.loop h3 { margin: 0 0 6px; font-size: 1rem; }
+  ol.loop p { font-size: 0.88rem; color: var(--muted); margin: 0; }
+  ol.loop li.alert { border-color: var(--hazard); }
+  ol.loop li.alert::before { color: var(--hazard); }
+  ol.loop li.done { border-color: var(--resolved); }
+  ol.loop li.done::before { color: var(--resolved); }
+
+  /* Ledger of numbers */
+  .ledger { border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+  .row { display: grid; grid-template-columns: 9.5em 1fr auto; gap: 6px 20px; padding: 16px 18px; border-top: 1px solid var(--rule); align-items: baseline; }
+  .row:first-child { border-top: 0; }
+  .value { font-size: 1.5rem; font-weight: 900; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  .row .what { font-weight: 600; }
+  .row .detail { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
+  .status { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; text-align: right; }
+  .status.measured { color: var(--resolved); }
+  .status.provisional { color: var(--posted); }
+  .status.pending { color: var(--faint); }
+  .status span { display: block; color: var(--faint); letter-spacing: 0.04em; text-transform: none; font-weight: 600; margin-top: 2px; }
+  .row.pending .value { color: var(--faint); }
+  .fineprint { font-size: 0.82rem; color: var(--faint); margin-top: 14px; }
+
+  /* On the box diagram */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: start; }
+  ul.points { padding: 0; margin: 0; list-style: none; }
+  ul.points li { padding: 12px 0; border-top: 1px solid var(--rule); }
+  ul.points li:first-child { border-top: 0; padding-top: 0; }
+  ul.points strong { display: block; margin-bottom: 2px; }
+  ul.points span { color: var(--muted); font-size: 0.92rem; }
+  .boxmap { display: grid; gap: 12px; }
+  .boundary { border: 1.5px dashed var(--rule-strong); border-radius: 12px; padding: 14px; display: grid; gap: 8px; }
+  .boundary > .label { margin-bottom: 2px; }
+  .node { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px; font-size: 0.88rem; }
+  .node b { display: block; font-size: 0.92rem; }
+  .node span { color: var(--muted); font-size: 0.8rem; }
+  .node.model { border-color: var(--rule-strong); background: var(--surface-raised); }
+  .arrow { text-align: center; color: var(--faint); font-size: 0.8rem; line-height: 1; }
+  .outside { border: 1px solid var(--rule); border-radius: 12px; padding: 12px 14px; background: var(--surface); }
+  .outside .label { color: var(--posted); }
+  .blocked-line { font-size: 0.8rem; color: var(--hazard); font-weight: 700; }
+
+  /* Video */
+  .video video { width: 100%; border-radius: 10px; border: 1px solid var(--rule); background: #000; }
+
+  /* Stack and footer */
+  .stack { display: flex; flex-wrap: wrap; gap: 8px; }
+  footer { border-top: 1px solid var(--rule); padding: 32px 0 48px; color: var(--faint); font-size: 0.85rem; }
+  footer .shell { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
+
+  @media (max-width: 900px) {
+    .hero, .split { grid-template-columns: 1fr; gap: 32px; }
+    ol.loop { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 560px) {
+    ol.loop { grid-template-columns: 1fr; }
+    .row { grid-template-columns: 1fr; }
+    .status { text-align: left; }
+    section.shell { padding: 40px 16px; }
+  }
+</style>
+</head>
+<body>
+<header class="shell">
+  <div class="topline">
+    <span class="label">Dell x NVIDIA GB10 Hackathon · Boston · 2026-10-03</span>
+    <a href="https://github.com/hemnaath04/site-safety-watch">Source on GitHub</a>
+  </div>
+  <div class="hero">
+    <div>
+      <span class="label">Site Safety Watch</span>
+      <h1>The camera that catches the blocked exit.</h1>
+      <p class="lead">An always-on safety agent for the cameras a site already has. It spots a blocked fire
+        exit, posts the hazard, the OSHA rule and a fix to Slack, records the supervisor's approval or false
+        alarm, and escalates when nobody answers.
+        <strong>Every model runs on one Dell Pro Max with GB10, and the video never leaves the box.</strong></p>
+    </div>
+    <figure style="margin:0">
+      <div class="card" role="img" aria-label="Example Slack alert: blocked exit at exit A, citing 29 CFR 1910.37(a)(3), with Approve and False alarm actions">
+        <div class="card-head"><span class="label">#safety</span><span class="label">Site Safety Watch</span></div>
+        <div class="stamp"><small>Hazard</small>Blocked exit</div>
+        <dl>
+          <dt>Zone</dt><dd>exit_a</dd>
+          <dt>Rule</dt><dd>29 CFR 1910.37(a)(3): exit routes must be free and unobstructed</dd>
+          <dt>Fix</dt><dd>Move the obstruction out of the exit route and tag the zone</dd>
+          <dt>Evidence</dt><dd>Annotated frame, faces blurred, kept on the box</dd>
+        </dl>
+        <div class="actions"><span class="chip go">Approve</span><span class="chip">False alarm</span></div>
+      </div>
+      <figcaption class="caption">Illustration of the alert. The Slack alert is text; the evidence frame stays on the box.</figcaption>
+    </figure>
+  </div>
+</header>
+
+<main>
+  <section class="shell" aria-labelledby="loop">
+    <span class="label">How it works</span>
+    <h2 id="loop">One incident, start to finish</h2>
+    <ol class="loop">
+      <li><h3>Watch</h3><p>Samples each camera on the box and checks the frame with a local vision model.</p></li>
+      <li class="alert"><h3>Alert</h3><p>Posts the hazard, zone, cited rule and a fix to Slack. The annotated, face-blurred frame stays on the box.</p></li>
+      <li><h3>Approve</h3><p>A supervisor approves or flags a false alarm in the channel, and the decision is recorded.</p></li>
+      <li class="done"><h3>Escalate</h3><p>An alert with no decision after 10 minutes is raised again, and a daily digest posts at 5 pm.</p></li>
+      <li><h3>Record</h3><p>Every event keeps its evidence, decision, owner and timestamps on the box.</p></li>
+    </ol>
+  </section>
+
+  <section class="shell" aria-labelledby="numbers">
+    <span class="label">Measured on our GB10 today</span>
+    <h2 id="numbers">Numbers from logged runs, not estimates</h2>
+    <div class="ledger" id="ledger"><div class="row"><div class="muted">Loading measurements...</div></div></div>
+    <p class="fineprint" id="updated"></p>
+  </section>
+
+  <section class="shell video" id="video-section" aria-labelledby="video" hidden>
+    <span class="label">Demo</span>
+    <h2 id="video">The recorded run</h2>
+    <video id="video-el" controls preload="metadata" playsinline></video>
+  </section>
+
+  <section class="shell" aria-labelledby="local">
+    <span class="label">Local-first by design</span>
+    <h2 id="local">Why it runs on the box</h2>
+    <div class="split">
+      <ul class="points">
+        <li><strong>Raw video stays on site.</strong><span>Cameras can show employees all day. Only a face-blurred evidence frame and the alert text reach Slack.</span></li>
+        <li><strong>The agent cannot send it out.</strong><span>The agent runs in an OpenShell sandbox that blocks outbound traffic by default. We tried an upload from inside it, and policy refused it.</span></li>
+        <li><strong>No cloud model, not even as a fallback.</strong><span>Every model call goes to vLLM on the same box: no per-call fees and no video uploads, however many cameras are attached.</span></li>
+        <li><strong>A person decides.</strong><span>Every alert waits for a human approval or a false-alarm flag, and both are recorded.</span></li>
+      </ul>
+      <div class="boxmap" aria-label="Architecture: everything runs inside the Dell Pro Max with GB10 except Slack">
+        <div class="boundary">
+          <span class="label">Dell Pro Max with GB10, on site</span>
+          <div class="node"><b>Cameras</b><span>Video read and sampled on the box</span></div>
+          <div class="arrow" aria-hidden="true">↓</div>
+          <div class="node"><b>Watcher</b><span>Vision check, de-duplication, face blur, annotation</span></div>
+          <div class="node model"><b>Local models</b><span>Qwen3.6 vision on vLLM, depth and people detection on the GPU</span></div>
+          <div class="arrow" aria-hidden="true">↓</div>
+          <div class="node"><b>Event store</b><span>SQLite with evidence, status and timestamps</span></div>
+          <div class="arrow" aria-hidden="true">↓</div>
+          <div class="node"><b>Agent</b><span>OpenClaw inside an OpenShell sandbox, set up with NemoClaw</span></div>
+        </div>
+        <div class="arrow" aria-hidden="true">↓ alert text and blurred frame only</div>
+        <div class="outside">
+          <span class="label">Leaves the box</span>
+          <div class="node" style="margin-top:8px"><b>Slack #safety</b><span>Alert, approval, escalation, digest</span></div>
+          <p class="blocked-line" style="margin:8px 0 0">Raw video and model calls: never.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="shell" aria-labelledby="buyer">
+    <span class="label">Who pays</span>
+    <h2 id="buyer">Built for the EHS manager, used by the shift supervisor</h2>
+    <p class="muted" style="max-width:46em">Serious workplace injuries cost US employers $58.7B a year
+      (<a href="https://www.libertymutualgroup.com/about-lm/news/articles/us-companies-spend-50.87b-year-top-ten-causes-serious-workplace-injuries-according-2025-liberty-mutual-workplace-safety-index">Liberty Mutual, 2025</a>),
+      and OSHA's 2026 maximum is $16,550 per serious violation
+      (<a href="https://www.osha.gov/memos/2026-05-21/2026-annual-adjustments-osha-civil-penalties">OSHA</a>).
+      Sites already pay for cameras that nobody watches live. Site Safety Watch turns them into a record
+      of hazards caught and decided, with evidence for each one.</p>
+  </section>
+
+  <section class="shell" aria-labelledby="stack">
+    <span class="label">Built with</span>
+    <h2 id="stack">Open-source components, all running locally</h2>
+    <div class="stack">
+      <span class="chip">vLLM</span><span class="chip">Qwen3.6 35B A3B NVFP4</span><span class="chip">NemoClaw</span>
+      <span class="chip">OpenClaw</span><span class="chip">OpenShell</span><span class="chip">Depth Anything V2 Small</span>
+      <span class="chip">RT-DETR</span><span class="chip">OpenCV</span><span class="chip">SQLite</span><span class="chip">ffmpeg</span>
+      <span class="chip">three.js</span><span class="chip">Python</span>
+    </div>
+    <p class="fineprint">Test clips were staged and filmed by the team on the day. Everything in the repository was written after doors opened.</p>
+  </section>
+</main>
+
+<footer>
+  <div class="shell">
+    <span>Hemnaath, Mithuna, Rahul</span>
+    <span>Every number on this page was measured on the GB10 on 2026-10-03 or is labelled.</span>
+  </div>
+</footer>
+
+<script>
+  const STATUS = { measured: 'Measured', provisional: 'Provisional', pending: 'Pending' }
+
+  function el(tag, cls, text) {
+    const node = document.createElement(tag)
+    if (cls) node.className = cls
+    if (text !== undefined) node.textContent = text
+    return node
+  }
+
+  fetch('numbers.json', { cache: 'no-store' })
+    .then(response => response.json())
+    .then(data => {
+      const ledger = document.getElementById('ledger')
+      ledger.replaceChildren()
+      for (const metric of data.metrics) {
+        const row = el('div', `row ${metric.status}`)
+        row.append(el('div', 'value', metric.value))
+        const body = el('div')
+        body.append(el('div', 'what', metric.label), el('div', 'detail', metric.detail))
+        row.append(body)
+        const status = el('div', `status ${metric.status}`, STATUS[metric.status] ?? metric.status)
+        const sub = [metric.when, metric.note].filter(Boolean).join(' · ')
+        if (sub) status.append(el('span', '', sub))
+        row.append(status)
+        ledger.append(row)
+      }
+      document.getElementById('updated').textContent = `Last updated ${data.updated}.`
+      if (data.video) {
+        document.getElementById('video-el').src = data.video
+        document.getElementById('video-section').hidden = false
+      }
+    })
+    .catch(() => {
+      document.getElementById('ledger').replaceChildren(el('div', 'row', 'Measurements could not be loaded.'))
+    })
+</script>
+</body>
+</html>

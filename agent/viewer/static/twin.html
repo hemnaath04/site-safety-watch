@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>3D twin, Site Safety Watch</title>
+  <link rel="stylesheet" href="/app.css">
+  <link rel="stylesheet" href="/twin.css">
+  <script type="module" src="/twin.js"></script>
+</head>
+<body class="twin-page">
+  <a class="skip-link" href="#cameras">Skip to camera feeds</a>
+
+  <header class="masthead">
+    <div class="brand">
+      <div class="brand-index" aria-hidden="true">SW</div>
+      <div>
+        <h1>Site Safety Watch</h1>
+        <p>Live 3D twin · rebuilt from the cameras on this GB10</p>
+      </div>
+    </div>
+
+    <div class="system-board" aria-label="Twin status">
+      <a class="system-cell twin-link" href="/">
+        <span>Command wall</span>
+        <strong>Open console</strong>
+      </a>
+      <span class="system-cell" id="twin-state" data-state="checking">
+        <span>Live twin</span>
+        <strong>Connecting</strong>
+      </span>
+      <span class="system-cell timestamp" id="twin-updated">
+        <span>Last update</span>
+        <strong>Pending</strong>
+      </span>
+    </div>
+  </header>
+
+  <main class="twin-shell">
+    <section class="twin-main" aria-labelledby="twin-scene-title">
+      <h2 class="visually-hidden" id="twin-scene-title">Live floor view</h2>
+      <div class="twin-stage" id="twin-stage">
+        <canvas id="twin-canvas" role="img" aria-label="Live three-dimensional view of the monitored exit, people and cameras"></canvas>
+        <div class="twin-labels" id="twin-labels" aria-hidden="true"></div>
+
+        <div class="twin-toolbar" role="group" aria-label="View">
+          <button type="button" data-view="top" aria-pressed="true">Top</button>
+          <span class="twin-camera-views" id="twin-camera-views"></span>
+          <span class="twin-toolbar-sep" aria-hidden="true"></span>
+          <button type="button" id="twin-scan-toggle" aria-pressed="false" hidden>3D model</button>
+        </div>
+        <p class="twin-scan-note" id="twin-scan-note" role="status" hidden></p>
+
+        <div class="twin-banner" id="twin-banner" role="alert" hidden>
+          <span>Exit blocked</span>
+          <strong id="twin-banner-zone"></strong>
+        </div>
+
+        <div class="twin-hud" aria-label="Live floor summary">
+          <div class="hud-people">
+            <span class="hud-label">People on the floor now</span>
+            <strong id="hud-people" aria-live="polite">-</strong>
+          </div>
+          <div class="hud-doors-wrap">
+            <span class="hud-label">Exits</span>
+            <ul class="hud-doors" id="hud-doors" aria-live="polite"></ul>
+          </div>
+        </div>
+
+        <div class="twin-empty" id="twin-empty" role="status">
+          <div class="depth-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+          <p>Connecting to the twin service.</p>
+          <span>Nothing is shown until the twin service on this box answers.</span>
+        </div>
+        <div class="twin-mock-tag" aria-hidden="true">Mock data</div>
+        <p class="twin-scan-credit" id="twin-scan-credit" hidden>Site model: built on the GB10 from a one-time LiDAR scan and the camera footage. Live state: computed on the GB10.</p>
+      </div>
+    </section>
+
+    <aside class="twin-cameras" id="cameras" aria-labelledby="cameras-title">
+      <div class="ledger-heading">
+        <div>
+          <p class="section-label">Camera feeds</p>
+          <h2 id="cameras-title">Cameras</h2>
+        </div>
+      </div>
+      <p class="feed-state" id="camera-empty" hidden>No cameras configured.</p>
+      <div class="camera-list" id="camera-list"></div>
+    </aside>
+  </main>
+
+  <footer class="footer-bar">
+    <strong class="local-credit">100% local on Dell Pro Max GB10</strong>
+    <section class="metrics-strip" id="twin-stats" aria-label="Twin throughput" hidden>
+      <div class="metrics-label">
+        <span class="state-dot" aria-hidden="true"></span>
+        <strong id="twin-stats-label">Measured on the GB10</strong>
+      </div>
+      <dl id="twin-stats-list"></dl>
+    </section>
+  </footer>
+</body>
+</html>

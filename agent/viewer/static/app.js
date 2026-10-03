@@ -1,11 +1,12 @@
 "use strict";
 
-const STATUSES = ["new", "posted", "approved", "false_alarm"];
+const STATUSES = ["new", "posted", "approved", "false_alarm", "resolved"];
 const STATUS_LABELS = {
   new: "New",
   posted: "Alert sent",
   approved: "Approved",
   false_alarm: "False alarm",
+  resolved: "Resolved",
 };
 
 const state = {
@@ -23,18 +24,21 @@ const els = {
   feedState: document.querySelector("#feed-state"),
   eventList: document.querySelector("#event-list"),
   clip: document.querySelector("#clip"),
+  cameraTitle: document.querySelector("#camera-title"),
   cameraFrame: document.querySelector("#camera-frame"),
   cameraEmpty: document.querySelector("#camera-empty"),
   sourceLabel: document.querySelector("#source-label"),
+  cameraSourceState: document.querySelector("#camera-source-state"),
   hazardStamp: document.querySelector("#hazard-stamp"),
-  hazardZone: document.querySelector("#hazard-zone"),
+  hazardTitle: document.querySelector("#hazard-title"),
+  hazardDetail: document.querySelector("#hazard-detail"),
+  hazardConfidence: document.querySelector("#hazard-confidence"),
   cameraCaption: document.querySelector("#camera-caption"),
   detailTitle: document.querySelector("#detail-title"),
+  detailSubtitle: document.querySelector("#detail-subtitle"),
   detailStatus: document.querySelector("#detail-status"),
   detailEmpty: document.querySelector("#detail-empty"),
   detailGrid: document.querySelector("#detail-grid"),
-  detailFrame: document.querySelector("#detail-frame"),
-  detailFrameCaption: document.querySelector("#detail-frame-caption"),
   detailExplanation: document.querySelector("#detail-explanation"),
   detailZone: document.querySelector("#detail-zone"),
   detailConfidence: document.querySelector("#detail-confidence"),
@@ -66,6 +70,13 @@ function statusClass(status) {
 
 function confidence(value) {
   return typeof value === "number" ? `${Math.round(value * 100)}%` : "Unavailable";
+}
+
+function eventTitle(status) {
+  if (status === "resolved") return "Exit route cleared";
+  if (status === "false_alarm") return "Marked false alarm";
+  if (status === "approved") return "Fix approved";
+  return "Exit route blocked";
 }
 
 async function getJson(url, options = {}) {
@@ -113,7 +124,7 @@ function renderFeed(newIds) {
     row.dataset.status = event.status;
     row.dataset.eventId = String(event.id);
     row.setAttribute("aria-current", String(event.id) === String(state.selectedId) ? "true" : "false");
-    row.setAttribute("aria-label", `Event ${event.id}, exit route blocked, ${readableZone(event.zone)}, ${STATUS_LABELS[event.status] || event.status}`);
+    row.setAttribute("aria-label", `Event ${event.id}, ${eventTitle(event.status)}, ${readableZone(event.zone)}, ${STATUS_LABELS[event.status] || event.status}`);
     if (!state.firstLoad && newIds.has(String(event.id))) row.classList.add("event-new");
 
     const time = document.createElement("time");
@@ -124,7 +135,7 @@ function renderFeed(newIds) {
     const summary = document.createElement("div");
     summary.className = "event-summary";
     const title = document.createElement("strong");
-    title.textContent = "Exit route blocked";
+    title.textContent = eventTitle(event.status);
     const zone = document.createElement("span");
     zone.textContent = readableZone(event.zone);
     summary.append(title, zone);
@@ -153,45 +164,51 @@ function renderFeed(newIds) {
 function setImageFallback(image, label) {
   image.addEventListener("error", () => {
     image.hidden = true;
-    if (image === els.cameraFrame && !state.clipAvailable) {
+    if (!state.clipAvailable) {
       els.cameraEmpty.hidden = false;
       els.cameraEmpty.querySelector("p").textContent = "Evidence frame unavailable.";
       els.cameraEmpty.querySelector("span").textContent = "The event record remains available while the local file is checked.";
       els.sourceLabel.textContent = `${label} evidence unavailable`;
-    } else if (image === els.detailFrame) {
-      els.detailFrameCaption.textContent = "Evidence frame unavailable";
     }
   }, { once: true });
 }
 
-function renderCamera() {
-  const newest = state.events[0];
-  if (!newest) {
+function renderCamera(event = state.events.find((item) => String(item.id) === String(state.selectedId)) || state.events[0]) {
+  if (!event) {
     els.cameraFrame.hidden = true;
     els.cameraEmpty.hidden = false;
     els.cameraEmpty.querySelector("p").textContent = "Watching. No hazards yet.";
     els.cameraEmpty.querySelector("span").textContent = "Evidence appears here when the local model records an event.";
     els.hazardStamp.hidden = true;
+    els.cameraTitle.textContent = "Exit route";
+    els.cameraSourceState.textContent = state.clipAvailable ? "Recorded replay" : "Camera source";
     els.sourceLabel.textContent = state.clipAvailable ? "Recorded replay" : "Waiting for evidence";
     return;
   }
 
-  els.hazardStamp.hidden = newest.status === "approved" || newest.status === "false_alarm";
-  els.hazardZone.textContent = readableZone(newest.zone);
+  const eventStatus = STATUS_LABELS[event.status] || event.status;
+  els.cameraTitle.textContent = readableZone(event.zone);
+  els.hazardStamp.hidden = false;
+  els.hazardStamp.dataset.state = event.status;
+  els.hazardTitle.textContent = eventTitle(event.status);
+  els.hazardDetail.textContent = `Event ${event.id} · ${readableZone(event.zone)} · ${eventStatus}`;
+  els.hazardConfidence.firstChild.nodeValue = confidence(event.confidence);
   if (state.clipAvailable) {
     els.clip.hidden = false;
     els.cameraFrame.hidden = true;
     els.cameraEmpty.hidden = true;
     els.cameraCaption.hidden = false;
-    els.sourceLabel.textContent = "Recorded replay";
+    els.cameraSourceState.textContent = "Recorded replay";
+    els.sourceLabel.textContent = "Primary evidence · Recorded replay";
   } else {
-    els.cameraFrame.src = `/frames/${encodeURIComponent(newest.id)}?v=${encodeURIComponent(newest.ts || "")}`;
-    els.cameraFrame.alt = `Evidence for blocked exit at ${readableZone(newest.zone)}`;
+    els.cameraFrame.src = `/frames/${encodeURIComponent(event.id)}?v=${encodeURIComponent(event.ts || "")}`;
+    els.cameraFrame.alt = `Evidence for blocked exit at ${readableZone(event.zone)}`;
     els.cameraFrame.hidden = false;
     els.cameraEmpty.hidden = true;
     els.cameraCaption.hidden = true;
-    els.sourceLabel.textContent = `Latest evidence, event ${newest.id}`;
-    setImageFallback(els.cameraFrame, "Latest");
+    els.cameraSourceState.textContent = "Evidence frame";
+    els.sourceLabel.textContent = `Primary evidence · Event ${event.id}`;
+    setImageFallback(els.cameraFrame, "Selected");
   }
 }
 
@@ -214,6 +231,7 @@ async function selectEvent(id) {
   try {
     const event = await getJson(`/api/events/${encodeURIComponent(id)}`);
     renderDetail(event);
+    renderCamera(event);
   } catch (_error) {
     els.detailGrid.hidden = true;
     els.detailEmpty.hidden = false;
@@ -224,26 +242,28 @@ async function selectEvent(id) {
 function renderDetail(event) {
   els.detailEmpty.hidden = true;
   els.detailGrid.hidden = false;
-  els.detailTitle.textContent = `Event ${event.id}, ${readableZone(event.zone)}`;
-  els.detailStatus.className = `status-chip ${statusClass(event.status)}`;
+  els.detailTitle.textContent = "Response record";
+  els.detailSubtitle.textContent = `Event ${event.id} · ${readableZone(event.zone)}`;
+  els.detailStatus.className = `module-state ${statusClass(event.status)}`;
   els.detailStatus.textContent = STATUS_LABELS[event.status] || "Unknown";
   els.detailExplanation.textContent = event.explanation || "No model observation recorded.";
   els.detailZone.textContent = readableZone(event.zone);
   els.detailConfidence.textContent = confidence(event.confidence);
   els.detailRule.textContent = event.rule || "No stored rule recorded.";
   els.detailFix.textContent = event.fix || "No proposed fix recorded.";
-  els.detailFrame.src = `/frames/${encodeURIComponent(event.id)}?v=${encodeURIComponent(event.ts || "")}`;
-  els.detailFrame.hidden = false;
-  els.detailFrameCaption.textContent = `Event ${event.id} evidence, ${readableZone(event.zone)}`;
-  setImageFallback(els.detailFrame, "Selected");
-
   els.detailTimeline.replaceChildren();
   addTimelineItem("Seen by local vision", event.ts);
   if (event.status !== "new") addTimelineItem("Alert sent", event.ts, "to the safety workflow");
-  if (event.status === "approved" || event.status === "false_alarm") {
+  if (event.status === "approved" || event.status === "false_alarm" || event.status === "resolved") {
     const label = event.status === "approved" ? "Approved" : "Marked false alarm";
-    const actor = event.disposition_by ? `by ${event.disposition_by}` : "";
-    addTimelineItem(label, event.disposition_ts, actor);
+    if (event.status !== "resolved" || event.disposition_ts) {
+      const resolvedLabel = event.status === "resolved" ? "Approved" : label;
+      const actor = event.disposition_by ? `by ${event.disposition_by}` : "";
+      addTimelineItem(resolvedLabel, event.disposition_ts, actor);
+    }
+  }
+  if (event.status === "resolved") {
+    addTimelineItem("Confirmed clear", event.resolved_ts, "by local vision");
   }
 }
 
@@ -272,7 +292,7 @@ async function pollEvents() {
     renderCamera();
     if (state.selectedId) await selectEvent(state.selectedId);
 
-    els.lastUpdate.textContent = `Last update ${formatTime(new Date().toISOString())}`;
+    els.lastUpdate.lastElementChild.textContent = formatTime(new Date().toISOString());
     state.firstLoad = false;
   } catch (_error) {
     setApiState(false);

@@ -1,0 +1,42 @@
+{
+  "room": {
+    "width_m": 8,
+    "depth_m": 6,
+    "walls": [[0, 0], [8, 0], [8, 6], [0, 6]],
+    "doors": [
+      {"id": "exit_a", "p1": [3.5, 0], "p2": [4.5, 0], "zone": "exit_a"}
+    ],
+    "top_rotation_deg": 0,
+    "mesh": {"clip_height_m": 2.2}
+  },
+  "cameras": [
+    {
+      "id": "cam1",
+      "label": "Phone A, back left",
+      "source": "data/clips/cam1.mp4",
+      "loop": true,
+      "sync_group": "exit_demo",
+      "start_offset_s": 0.0,
+      "pose": {"x": 0.5, "y": 5.5, "yaw_deg": -40, "z": 1.6, "look_at": [4, 0, 1], "hfov_deg": 70},
+      "door_id": "exit_a",
+      "floor_points": {
+        "pixels": [[212, 690], [1080, 702], [905, 420], [380, 415]],
+        "meters": [[1, 4], [6, 4], [6, 1], [1, 1]]
+      }
+    },
+    {
+      "id": "cam2",
+      "label": "Phone B, back right",
+      "source": "data/clips/cam2.mp4",
+      "loop": true,
+      "sync_group": "exit_demo",
+      "start_offset_s": 3.5,
+      "pose": {"x": 7.5, "y": 5.5, "yaw_deg": -140, "z": 1.6, "look_at": [4, 0, 1], "hfov_deg": 70},
+      "door_id": "exit_a",
+      "floor_points": {
+        "pixels": [[150, 650], [1100, 640], [880, 400], [360, 410]],
+        "meters": [[7, 5], [2, 5], [2, 1], [7, 1]]
+      }
+    }
+  ]
+}

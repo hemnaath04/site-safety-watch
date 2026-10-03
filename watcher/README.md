@@ -37,7 +37,8 @@ Zone is resolved from the clip name (`NN_hazard_zone.mp4`) or `watcher/zones.py`
 `--zone` to override.
 
 ## The ssw CLI (contract 0.5)
-Each command prints JSON only. `ssw pending` prints the bare string `NO_REPLY` when empty.
+Each command prints JSON only. `ssw pending` and `ssw pending-resolved` print the bare string
+`NO_REPLY` when empty.
 ```
 ./watcher/ssw events --status new
 ./watcher/ssw event <id>
@@ -45,7 +46,22 @@ Each command prints JSON only. `ssw pending` prints the bare string `NO_REPLY` w
 ./watcher/ssw mark-posted <id>
 ./watcher/ssw dispose <id> approved|false_alarm --by <slack_user>
 ./watcher/ssw pending
+./watcher/ssw pending-resolved             # events that just went clear, not yet announced
+./watcher/ssw mark-resolved-announced <id> # call after the agent posts the all-clear
 ```
+
+## Annotated evidence frame
+After blur, the saved hazard frame has the obstruction box and a label
+(`BLOCKED EXIT - 29 CFR 1910.37(a)(3)`) drawn on it, so an alert or screenshot reads at a
+glance. A frame with no box (a clear or resolution frame) is left plain. On by default;
+`--no-annotate` or `SSW_ANNOTATE=0` to disable.
+
+## Auto-resolution (closes the loop)
+After two clear checks in a row in a zone (exit visible and not blocked), the watcher marks
+the open events there `resolved` with `resolved_ts`, a `resolved_frame_path` and a measured
+`time_to_clear_sec`. On by default; disable with `--no-auto-resolve` (or `SSW_AUTO_RESOLVE=0`),
+tune the streak with `SSW_CLEARS_TO_RESOLVE` (default 2). The agent polls `ssw pending-resolved`
+to post the all-clear once.
 Tip: `alias ssw="python -m watcher.ssw"` from the repo root.
 
 ## Settings (env)
@@ -56,6 +72,12 @@ Tip: `alias ssw="python -m watcher.ssw"` from the repo root.
 ## Contracts
 Event JSON 0.1, SQLite 0.2, rule table 0.3, vision endpoint 0.4, `ssw` CLI 0.5, all in
 `plans/SCOPE-OF-WORK-site-safety-watch.md`. Build against them exactly.
+
+## Vision output (enforced schema)
+The model is asked for `{exit_visible, blocked, box, confidence, explanation}`, enforced by
+vLLM guided decoding at temperature 0, so the reply always parses (this is what makes the
+second look reliable). `vision.to_event` maps it to the internal event: `blocked_exit` only
+when an exit is both visible and blocked, else `none`. Timestamps are stored in local time.
 
 ## Safety and efficiency features
 - **Face blur (on by default).** The saved evidence frame has any detected face blurred
@@ -72,9 +94,32 @@ Example for the live demo on the box:
 python -m watcher.watcher --clip udp://127.0.0.1:5000 --stream --second-look --motion-gate
 ```
 
+## Accuracy switches (post-lock, each off by default, measured on and off)
+- **`--vote 3/4`** (or `SSW_VOTE=3/4`): only alert when the hazard is seen in 3 of the last
+  4 samples. Cuts single-frame false alarms.
+- **`--enhance`** (`SSW_ENHANCE=1`): crop to the exit zone, upscale 2x, CLAHE the frame sent
+  to the model (the saved evidence frame stays the original). Needs an `exit_box` in
+  `zones.json` for the crop, otherwise it enhances the whole frame.
+- **`--locate`** (`SSW_LOCATE=1`): ask the model for the obstruction box and require it to
+  overlap the exit zone (`SSW_LOCATE_MIN_OVERLAP`, default 0.1). The box is stored on the
+  event (nullable `box` column).
+- **`--verifier-url http://127.0.0.1:8001/v1`** (`SSW_VERIFIER_URL`): a second local model
+  (NVIDIA Cosmos) confirms a candidate. Fails open on any error, so a flaky verifier never
+  drops a real hazard.
+- **`zones.json`**: per-zone config, `{"exit_a": {"exit_box": [x,y,w,h]}}`, used by enhance
+  and locate. Override the path with `SSW_ZONES`.
+- **`data/decisions.jsonl`**: one JSON line per processed frame (hazard, confidence, box,
+  present, voted, action) for debugging and the eval. Override with `SSW_DECISIONS`.
+
+Measured demo run on the box:
+```
+python -m watcher.watcher --clip <replay-url> --stream --vote 3/4 --enhance --locate \
+    --second-look --verifier-url http://127.0.0.1:8001/v1
+```
+
 ## Tests
 ```
 python -m unittest discover -s watcher/tests
 ```
-29 tests. The two that need OpenCV (blur, motion decode) skip where it is not installed and
+52 tests. The two that need OpenCV (blur, motion decode) skip where it is not installed and
 run on the box.
